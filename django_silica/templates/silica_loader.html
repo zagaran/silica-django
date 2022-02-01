@@ -1,0 +1,4 @@
+{# form, form_data_key, form_schema_key, and form_ui_schema_key are passed in #}
+{{ form.get_data_for_template|json_script:form_data_key }}
+{{ form.get_schema|json_script:form_schema_key }}
+{{ form.get_ui_schema|json_script:form_ui_schema_key }}
