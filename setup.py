@@ -23,8 +23,15 @@ THE SOFTWARE.
 
 @author: Noah (Noah Houghton)
 """
+import pathlib
 
 from setuptools import setup, find_packages
+
+# The directory containing this file
+HERE = pathlib.Path(__file__).parent
+
+# The text of the README file
+README = (HERE / "README.md").read_text()
 
 setup(
     name="django_silica",
@@ -47,6 +54,6 @@ setup(
         "Operating System :: POSIX",
         "Programming Language :: Python",
     ],
-    zip_safe=False,
+    long_description=README,
     include_package_data=True,
 )
