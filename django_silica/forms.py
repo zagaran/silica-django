@@ -66,7 +66,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
             if isinstance(field, SilicaFormArrayField):
                 field.refresh_data()
             # first check instance
-            elif self.instance and hasattr(self.instance, field_name):
+            if self.instance and hasattr(self.instance, field_name) and not isinstance(field, SilicaFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
             elif field.initial:
                 initial[field_name] = field.initial
