@@ -2,8 +2,9 @@ from collections import defaultdict
 
 from django import forms
 
-from django_silica.fields import SilicaFormArrayField
-from django_silica.mixins import JsonSchemaMixin
+from silica_django.fields import SilicaFormArrayField
+from silica_django.layout import Control
+from silica_django.mixins import JsonSchemaMixin
 
 
 class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
@@ -75,28 +76,22 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
         return initial
 
     def get_ui_schema(self):
+        # this function is only ever called after the form has been instantiated, so we have access to self.fields
+        rules = {}
+        custom_components = {}
+        if hasattr(self.Meta, 'rules'):
+            rules = self.Meta.rules
+        if hasattr(self.Meta, 'custom_components'):
+            custom_components = self.Meta.custom_components
         if hasattr(self.Meta, 'custom_layout'):
-            rules = {}
-            if hasattr(self.Meta, 'rules'):
-                rules = self.Meta.rules
             return self.Meta.custom_layout.get_schema(rules)
         elements = []
         for field_name, field in self.fields.items():
             if hasattr(self.Meta, 'custom_ui_schema') and field_name in self.Meta.custom_ui_schema:
                 element = self.Meta.custom_ui_schema[field_name]
             else:
-                element = {
-                    "type": "Control",
-                    "scope": f"#/properties/{field_name}",
-                    'name': field_name,
-                }
-            if field.label:
-                element['label'] = field.label
-            if field.disabled:
-                element['readonly'] = True
-            # if there is a rule for this element, set it
-            if hasattr(self.Meta, 'rules') and field_name in self.Meta.rules:
-                element['rule'] = self.Meta.rules[field_name].get_schema()
+                ui_kwargs = self.django_widget_to_ui_schema(field_name, field)
+                element = Control(field_name, **ui_kwargs).get_schema(rules, custom_components)
             elements.append(element)
         return {"elements": elements}
 

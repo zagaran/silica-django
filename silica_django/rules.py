@@ -1,4 +1,4 @@
-from django_silica.utils.jsonschema import JsonSchemaUtils
+from silica_django.utils.jsonschema import JsonSchemaUtils
 
 
 class UIEffects:

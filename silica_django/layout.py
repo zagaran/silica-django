@@ -1,3 +1,6 @@
+from silica_django.mixins import JsonSchemaMixin
+
+
 class SilicaUiElementType:
     horizontal = "HorizontalLayout"
     vertical = "VerticalLayout"
@@ -21,19 +24,22 @@ class SilicaUiElement:
 class Control(SilicaUiElement):
     type = SilicaUiElementType.control
 
-    def __init__(self, label, scope=None, **kwargs):
+    def __init__(self, field_name, scope=None, **kwargs):
         super().__init__(**kwargs)
         if scope is None:
-            scope = f'#/properties/{label.lower()}'
+            scope = f'#/properties/{field_name.lower()}'
         self.kwargs.update({
             'scope': scope,
-            'label': label,
             'type': self.type,
+            'field_name': field_name,
         })
+        self.kwargs.update(kwargs)
 
-    def get_schema(self, rules):
-        if self.kwargs['label'] in rules:
-            self.kwargs['rule'] = rules[self.kwargs['label']].get_schema()
+    def get_schema(self, rules, custom_components):
+        if self.kwargs['field_name'] in rules:
+            self.kwargs['rule'] = rules[self.kwargs['field_name']].get_schema()
+        if self.kwargs['field_name'] in custom_components:
+            self.kwargs['customComponentName'] = custom_components[self.kwargs['field_name']]
         return self.kwargs
 
 
@@ -52,8 +58,8 @@ class Controls:
             else:
                 raise Exception("Unsupported Element configuration; you must pass either a string or a dictionary")
 
-    def get_schema(self, rules):
-        return [e.get_schema(rules) for e in self.elements]
+    def get_schema(self, rules, custom_components):
+        return [e.get_schema(rules, custom_components) for e in self.elements]
 
 
 class SilicaLayout(SilicaUiElement):
@@ -64,10 +70,10 @@ class SilicaLayout(SilicaUiElement):
         self.elements = args
         self.kwargs.update({'type': self.type})
 
-    def get_schema(self, rules):
+    def get_schema(self, rules, custom_components):
         schema = self.kwargs
         # flatten elements
-        elements = list(map(lambda e: e.get_schema(rules), self.elements))
+        elements = list(map(lambda e: e.get_schema(rules, custom_components), self.elements))
         final_elements = []
         for e in elements:
             if isinstance(e, list):
@@ -98,10 +104,10 @@ class Group(SilicaLayout):
 class Categorization(SilicaLayout):
     type = SilicaUiElementType.categorization
 
-    def get_schema(self, rules):
+    def get_schema(self, rules, custom_components):
         if any([e.type != SilicaUiElementType.category for e in self.elements]):
             raise Exception("Categorization elements may not have any immediate non-Category child elements.")
-        return super().get_schema(rules)
+        return super().get_schema(rules, custom_components)
 
 
 class Category(SilicaLayout):

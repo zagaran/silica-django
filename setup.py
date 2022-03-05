@@ -34,18 +34,19 @@ HERE = pathlib.Path(__file__).parent
 README = (HERE / "README.md").read_text()
 
 setup(
-    name="django_silica",
-    version="0.0.2",
+    name="silica_django",
+    version="0.0.1",
     packages=find_packages(),
 
     author="Zagaran, Inc.",
     description="Library which translates Django Forms into JSON for use with frontend libraries implementing JSONSchema and, optionally, JsonForm's UISchema",
     license="MIT",
-    keywords="django jsonforms forms django_silica",
-    url="https://github.com/zagaran/django-silica",
+    keywords="django jsonforms forms silica_django",
+    url="https://github.com/zagaran/silica-django",
     install_requires=[
         "django"
     ],
+    zip_safe=False,
     classifiers=[
         "Development Status :: 4 - Beta",
         "License :: OSI Approved :: MIT License",

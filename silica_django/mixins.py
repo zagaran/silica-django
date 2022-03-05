@@ -1,7 +1,7 @@
 from django import forms
 
-from django_silica import fields
-from django_silica.utils.jsonschema import JsonSchemaUtils
+from silica_django import fields
+from silica_django.utils.jsonschema import JsonSchemaUtils
 
 
 class JsonSchemaMixin(JsonSchemaUtils):
@@ -55,8 +55,24 @@ class JsonSchemaMixin(JsonSchemaUtils):
             # for a radio select, everything is a string - we'll convert on the backend
             field_type = "string"
             if not hasattr(field, 'choices'):
-                field_kwargs["oneOf"] = [{'const': value, 'title': title} for (value, title) in field.widget.choices]
+                field_kwargs["oneOf"] = [{'const': str(value), 'title': title} for (value, title) in field.widget.choices]
         return {
             "type": field_type,
             **field_kwargs
         }
+
+    def django_widget_to_ui_schema(self, field_name, field):
+        ui_schema = {
+            'options': {}
+        }
+        if field.label:
+            ui_schema['label'] = field.label
+        if field.disabled:
+            ui_schema['readonly'] = True
+        # special values for widgets
+        if isinstance(field.widget, forms.Textarea):
+            ui_schema['options']['multi'] = True
+        # add rulesF
+        if hasattr(self.Meta, 'rules') and field_name in self.Meta.rules:
+            ui_schema['rule'] = self.Meta.rules[field_name].get_schema()
+        return ui_schema
