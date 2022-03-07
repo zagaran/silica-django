@@ -1,8 +1,5 @@
 """
-array saves are done in a single transaction
 
-- anything with an id gets updated
-- anything without an id gets created
 - ordering elements
 - new elements
 - specify primary key
@@ -18,33 +15,104 @@ from django import forms
 from django.db import transaction
 
 
-class SilicaFormArrayField(forms.Field):
+class SilicaModelFormArrayField(forms.Field):
     """
         Implements a special kind of array field where the items are objects related to the form instance.
 
         This field does not behave like standard form fields, because its behavior is fundamentally different
         from that of a standard form field, which acts on a single instance.
+
+        Array saves are done in a single transaction. Any object which already has a primary key field gets updated; 
+        any object without a primary key field gets created. Any object in the queryset whose value is not present in
+        the data gets deleted (this may change).
+        
+        To customize the behavior of this field, subclass it and implement your own handler functions as needed.
+
     """
 
-    def __init__(self, instance_form, queryset_fn, *args, delete_override=None, identifier_field='pk',
-                 queryset_kwargs=None, batch_size=200, new_item_kwargs=None, create_function=None, **kwargs):
+    def __init__(self, *args, identifier_field='pk', batch_size=200, **kwargs):
         super().__init__(*args, **kwargs)
-        self.instance_form = instance_form
-        self.instantiated_forms = None
-        self.queryset_fn = queryset_fn
-        self.delete_override = delete_override
+        if not self.instance_form:
+            raise NotImplementedError("You must define instance_form to use this field")
+        if not isinstance(self.instance_form, forms.models.ModelFormMetaclass):
+            # TODO: figure out why we can't just check for forms.ModelForm and document the reason
+            raise TypeError(f"instance_form must be a model form, not {type(self.instance_form)}")
+        self.instantiated_forms = []
         self.identifier_field = identifier_field
-        self.queryset_kwargs = queryset_kwargs or {}
         # this value must be set by the initialization of the form
         self.parent_instance = None
         self._queryset = None
         self.batch_size = batch_size
-        self.new_item_kwargs = new_item_kwargs or {}
-        self.create_function = create_function
-        # the list of errors by pk of object
-        self.errors_list = None
+        # the list of update errors by pk of object
+        self.update_errors = defaultdict(list)
         # the list of errors for this field (database errors)
-        self.non_field_errors_list = None
+        self.errors = []
+
+    def get_queryset(self):
+        return self.instance_form._meta.model.objects.all()
+
+    @property
+    def qs_lookup(self):
+        return {item[self.identifier_field]: item for item in self.queryset}
+
+    def get_items_to_delete(self, data):
+        key = self.identifier_field
+        item_keys = [datum[key] for datum in data if datum[key]]
+        return self.queryset.exclude(**{f'{key}__in': item_keys})
+
+    def process_data(self, data):
+        items_to_delete = self.get_items_to_delete(data)
+        self.handle_delete(items_to_delete)
+        updates = []
+        creates = []
+        for item in data:
+            # the identifier field will either be the empty string or the correct value for the object
+            pk = item[self.identifier_field]
+            if pk:
+                # if the item already has a pk, we are updating
+                update = self.handle_update(pk, item)
+                if update:
+                    updates.append(update)
+            else:
+                # if the item does not have a pk, we are creating
+                create = self.do_create(item)
+                if create:
+                    creates.append(create)
+        return creates, updates
+
+    def handle_delete(self, qs):
+        try:
+            qs.delete()
+        except Exception as e:
+            self.errors.append(f"There was an error deleting items. {repr(e)}")
+
+    def clean_data_for_create(self, item):
+        # pk has default value of "" since the field must exist in the form; if it exists, clear it
+        del item[self.identifier_field]
+        return item
+
+    def do_create(self, item):
+        item = self.clean_data_for_create(item)
+        return self.handle_create(item)
+
+    def handle_create(self, item):
+        cleaned_data, errors = self.validate_against_form(item)
+        if not errors:
+            new_item = self.queryset.model(**cleaned_data)
+            return new_item
+        else:
+            self.errors.append(f"There was an error creating an item. {errors}")
+            return None
+
+    def handle_update(self, pk, item):
+        print('updating')
+        instance = self.qs_lookup[pk]
+        cleaned_data, errors = self.validate_against_form(item, instance=instance)
+        if not errors:
+            return self.queryset.model(**cleaned_data, **{self.identifier_field: pk})
+        else:
+            self.update_errors[pk].append(errors)
+            return None
 
     @property
     def queryset(self):
@@ -52,68 +120,38 @@ class SilicaFormArrayField(forms.Field):
             self.refresh_data()
         return self._queryset
 
-    def refresh_data(self, select_for_update=False):
-        # TODO: is select_for_update necessary?
-        self._queryset = self.queryset_fn(self.parent_instance, select_for_update=select_for_update, **self.queryset_kwargs)
+    def refresh_data(self):
+        self._queryset = self.get_queryset()
         self.instantiated_forms = [self.instance_form(instance=instance) for instance in self._queryset]
         self.initial = [{**form.initial, f'{self.identifier_field}': getattr(form.instance, self.identifier_field)}
                         for form in self.instantiated_forms]
 
-    def validate_against_form(self, instance, form_data):
+    def validate_against_form(self, form_data, instance=None):
         """ Ensure that data being passed from frontend validates against form """
         form = self.instance_form(form_data, instance=instance)
         form.is_valid()
         return form.cleaned_data, form.errors
 
     def to_python(self, data):
+        print('to_python')
+        # TODO: verify when this is called so we're not duplicating work
         if data in self.empty_values:
             return None
-        errors_list = defaultdict(list)
-        non_field_errors_list = []
         # set up queryset outside atomic transaction
-        self.refresh_data(select_for_update=True)
+        self.refresh_data()
         with transaction.atomic():
-            # first, delete any item in the queryset which is no longer in the data set
-            key = self.identifier_field
-            item_keys = [datum[key] for datum in data if datum[key] != '']
-            items_to_delete = self.queryset.exclude(**{f'{key}__in': item_keys})
-            try:
-                if not self.delete_override:
-                    items_to_delete.delete()
-                else:
-                    self.delete_override(items_to_delete)
-            except Exception:
-                non_field_errors_list.append("There was an error removing existing items.")
-            # TODO: handle de-duplication?
-            updates = []
-            creates = []
-            for item in data:
-                pk = item[key]
-                if pk:
-                    instance = self.queryset.get(**{key: pk})
-                    cleaned_data, errors = self.validate_against_form(instance, item)
-                    if not errors:
-                        updates.append(self.queryset.model(**cleaned_data, **{key: pk}))
-                    else:
-                        errors_list[pk].append(errors)
-                else:
-                    # if there is no PK, we must be creating a new item
-                    # create any new item; assume that all required fields are part of the form or provided in new_item_kwargs
-                    del item[key]
-                    if self.create_function:
-                        creates.append(self.create_function(self.parent_instance, item, **self.new_item_kwargs))
-                    else:
-                        creates.append(self.queryset.model(**item))
+            creates, updates = self.process_data(data)
+            print("creates", creates)
+            print("updates", updates)
             try:
                 self.queryset.model.objects.bulk_create(creates, batch_size=self.batch_size)
-            except Exception:
-                non_field_errors_list.append("There was an error creating new objects.")
+            except Exception as e:
+                self.errors.append(f"There was an error creating new objects. {repr(e)}")
             try:
                 self.queryset.model.objects.bulk_update(updates, self.instance_form._meta.fields, batch_size=self.batch_size)
-            except Exception:
-                non_field_errors_list.append("There was an error updating existing objects.")
-        # force form to re-do queryset and initial values
+            except Exception as e:
+                self.errors.append(f"There was an error updating existing objects. {repr(e)}")
+        # force form to re-do queryset and re-calculate initial values so that newly created & updated data is displayed on refresh
         self._queryset = None
-        self.non_field_errors_list = non_field_errors_list
-        self.errors_list = errors_list
+        print(self.errors)
         return data

@@ -1,6 +1,3 @@
-from silica_django.mixins import JsonSchemaMixin
-
-
 class SilicaUiElementType:
     horizontal = "HorizontalLayout"
     vertical = "VerticalLayout"
@@ -35,11 +32,9 @@ class Control(SilicaUiElement):
         })
         self.kwargs.update(kwargs)
 
-    def get_schema(self, rules, custom_components):
+    def get_schema(self, rules):
         if self.kwargs['field_name'] in rules:
             self.kwargs['rule'] = rules[self.kwargs['field_name']].get_schema()
-        if self.kwargs['field_name'] in custom_components:
-            self.kwargs['customComponentName'] = custom_components[self.kwargs['field_name']]
         return self.kwargs
 
 
@@ -58,8 +53,8 @@ class Controls:
             else:
                 raise Exception("Unsupported Element configuration; you must pass either a string or a dictionary")
 
-    def get_schema(self, rules, custom_components):
-        return [e.get_schema(rules, custom_components) for e in self.elements]
+    def get_schema(self, rules):
+        return [e.get_schema(rules) for e in self.elements]
 
 
 class SilicaLayout(SilicaUiElement):
@@ -70,10 +65,10 @@ class SilicaLayout(SilicaUiElement):
         self.elements = args
         self.kwargs.update({'type': self.type})
 
-    def get_schema(self, rules, custom_components):
+    def get_schema(self, rules):
         schema = self.kwargs
         # flatten elements
-        elements = list(map(lambda e: e.get_schema(rules, custom_components), self.elements))
+        elements = list(map(lambda e: e.get_schema(rules), self.elements))
         final_elements = []
         for e in elements:
             if isinstance(e, list):
@@ -104,10 +99,10 @@ class Group(SilicaLayout):
 class Categorization(SilicaLayout):
     type = SilicaUiElementType.categorization
 
-    def get_schema(self, rules, custom_components):
+    def get_schema(self, rules):
         if any([e.type != SilicaUiElementType.category for e in self.elements]):
-            raise Exception("Categorization elements may not have any immediate non-Category child elements.")
-        return super().get_schema(rules, custom_components)
+            raise Exception("Categorization elements may not have any non-Category direct children.")
+        return super().get_schema(rules)
 
 
 class Category(SilicaLayout):

@@ -6,7 +6,7 @@ from silica_django.utils.jsonschema import JsonSchemaUtils
 
 class JsonSchemaMixin(JsonSchemaUtils):
     """ Contains utility functions for interfacing between native python/django and jsonschema """
-    def django_to_jsonschema_field(self, field_name, field):
+    def _django_to_jsonschema_field(self, field_name, field):
         # most field types are string by default
         field_type = "string"
         # format is only required for some special types e.g. date
@@ -27,7 +27,7 @@ class JsonSchemaMixin(JsonSchemaUtils):
         elif isinstance(field, forms.BooleanField):
             field_type = "boolean"
         # todo: differentiate between arrays of related items and a multi field (e.g. tags)
-        elif isinstance(field, fields.SilicaFormArrayField):
+        elif isinstance(field, fields.SilicaModelFormArrayField):
             field_type = "array"
             if field.instantiated_forms:
                 item_schema = field.instantiated_forms[0].get_schema()
@@ -43,8 +43,6 @@ class JsonSchemaMixin(JsonSchemaUtils):
             }            
         if hasattr(field, 'choices'):
             field_kwargs["oneOf"] = [{'const': value, 'title': title} for (value, title) in field.choices]
-        if hasattr(self.Meta, 'custom_components') and field_name in self.Meta.custom_components:
-            field_kwargs['customComponentName'] = self.Meta.custom_components[field_name]
         # special checks
         if isinstance(field.widget, forms.HiddenInput):
             field_kwargs['hidden'] = True
@@ -61,7 +59,7 @@ class JsonSchemaMixin(JsonSchemaUtils):
             **field_kwargs
         }
 
-    def django_widget_to_ui_schema(self, field_name, field):
+    def _django_widget_to_ui_schema(self, field_name, field):
         ui_schema = {
             'options': {}
         }
@@ -72,7 +70,9 @@ class JsonSchemaMixin(JsonSchemaUtils):
         # special values for widgets
         if isinstance(field.widget, forms.Textarea):
             ui_schema['options']['multi'] = True
-        # add rulesF
+        # add rules
         if hasattr(self.Meta, 'rules') and field_name in self.Meta.rules:
             ui_schema['rule'] = self.Meta.rules[field_name].get_schema()
+        if hasattr(self.Meta, 'custom_components') and field_name in self.Meta.custom_components:
+            ui_schema['options']['customComponentName'] = self.Meta.custom_components[field_name]
         return ui_schema

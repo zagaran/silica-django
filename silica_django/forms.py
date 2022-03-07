@@ -2,12 +2,12 @@ from collections import defaultdict
 
 from django import forms
 
-from silica_django.fields import SilicaFormArrayField
+from silica_django.fields import SilicaModelFormArrayField
 from silica_django.layout import Control
 from silica_django.mixins import JsonSchemaMixin
 
 
-class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
+class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     """ Adds Silica functionality to any Django form.
 
         Required Meta fields:
@@ -27,20 +27,20 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
         if len(args) > 0:
             # we have to mutate the querydict, so make a copy
             raw_data = new_args[0].copy()
-            array_info = self.extract_array_info(raw_data)
+            array_info = self._extract_array_info(raw_data)
             for key, values in array_info.items():
                 raw_data[key] = values
             new_args = [raw_data, *args]
         self.instance = kwargs.get('instance')
         super().__init__(*new_args, **kwargs)
-        self.setup_array_fields()
+        self._setup_array_fields()
 
-    def setup_array_fields(self):
+    def _setup_array_fields(self):
         for field in self.fields.values():
-            if isinstance(field, SilicaFormArrayField):
+            if isinstance(field, SilicaModelFormArrayField):
                 field.parent_instance = self.instance
 
-    def extract_array_info(self, raw_data):
+    def _extract_array_info(self, raw_data):
         # iterate over raw data keys; if any are an array field, then process it
         array_items_by_name_and_count = defaultdict(lambda: defaultdict(dict))
         for key, value in raw_data.items():
@@ -64,10 +64,10 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
     def get_data_for_template(self):
         initial = {}
         for field_name, field in self.fields.items():
-            if isinstance(field, SilicaFormArrayField):
+            if isinstance(field, SilicaModelFormArrayField):
                 field.refresh_data()
             # first check instance
-            if self.instance and hasattr(self.instance, field_name) and not isinstance(field, SilicaFormArrayField):
+            if self.instance and hasattr(self.instance, field_name) and not isinstance(field, SilicaModelFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
             elif field.initial:
                 initial[field_name] = field.initial
@@ -78,11 +78,8 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
     def get_ui_schema(self):
         # this function is only ever called after the form has been instantiated, so we have access to self.fields
         rules = {}
-        custom_components = {}
         if hasattr(self.Meta, 'rules'):
             rules = self.Meta.rules
-        if hasattr(self.Meta, 'custom_components'):
-            custom_components = self.Meta.custom_components
         if hasattr(self.Meta, 'custom_layout'):
             return self.Meta.custom_layout.get_schema(rules)
         elements = []
@@ -90,8 +87,8 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
             if hasattr(self.Meta, 'custom_ui_schema') and field_name in self.Meta.custom_ui_schema:
                 element = self.Meta.custom_ui_schema[field_name]
             else:
-                ui_kwargs = self.django_widget_to_ui_schema(field_name, field)
-                element = Control(field_name, **ui_kwargs).get_schema(rules, custom_components)
+                ui_kwargs = self._django_widget_to_ui_schema(field_name, field)
+                element = Control(field_name, **ui_kwargs).get_schema(rules)
             elements.append(element)
         return {"elements": elements}
 
@@ -99,7 +96,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.ModelForm):
         """ Schema is used by the frontend to validate rules """
         # TODO: refine this to support more complex jsonschema rules and to (perhaps) simplify redundant rules
         properties = {
-                field_name: self.django_to_jsonschema_field(field_name, field)
+                field_name: self._django_to_jsonschema_field(field_name, field)
                 for field_name, field in self.fields.items()
             }
         if not full_schema:

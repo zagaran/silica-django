@@ -24,6 +24,7 @@ THE SOFTWARE.
 @author: Noah (Noah Houghton)
 """
 import pathlib
+import sys
 
 from setuptools import setup, find_packages
 
@@ -33,9 +34,13 @@ HERE = pathlib.Path(__file__).parent
 # The text of the README file
 README = (HERE / "README.md").read_text()
 
+if sys.version < '3.0':
+    print("ERROR: python version 3.0 or higher is required")
+    sys.exit(1)
+
 setup(
     name="silica_django",
-    version="0.0.2",
+    version="0.0.3",
     packages=find_packages(),
 
     author="Zagaran, Inc.",
@@ -44,7 +49,7 @@ setup(
     keywords="django jsonforms forms silica_django",
     url="https://github.com/zagaran/silica-django",
     install_requires=[
-        "django"
+        "django>=3.2"
     ],
     zip_safe=False,
     classifiers=[
