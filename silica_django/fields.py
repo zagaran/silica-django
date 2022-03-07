@@ -55,14 +55,7 @@ class SilicaModelFormArrayField(forms.Field):
     def qs_lookup(self):
         return {item[self.identifier_field]: item for item in self.queryset}
 
-    def get_items_to_delete(self, data):
-        key = self.identifier_field
-        item_keys = [datum[key] for datum in data if datum[key]]
-        return self.queryset.exclude(**{f'{key}__in': item_keys})
-
     def process_data(self, data):
-        items_to_delete = self.get_items_to_delete(data)
-        self.handle_delete(items_to_delete)
         updates = []
         creates = []
         for item in data:
@@ -79,6 +72,17 @@ class SilicaModelFormArrayField(forms.Field):
                 if create:
                     creates.append(create)
         return creates, updates
+
+    def do_deletion(self, data):
+        items_to_delete = self.get_items_to_delete(data)
+        self.handle_delete(items_to_delete)
+        
+    def get_items_to_delete(self, data):
+        if not data:
+            data = []
+        key = self.identifier_field
+        item_keys = [datum[key] for datum in data if datum[key]]
+        return self.queryset.exclude(**{f'{key}__in': item_keys})
 
     def handle_delete(self, qs):
         try:
@@ -105,7 +109,6 @@ class SilicaModelFormArrayField(forms.Field):
             return None
 
     def handle_update(self, pk, item):
-        print('updating')
         instance = self.qs_lookup[pk]
         cleaned_data, errors = self.validate_against_form(item, instance=instance)
         if not errors:
@@ -133,16 +136,15 @@ class SilicaModelFormArrayField(forms.Field):
         return form.cleaned_data, form.errors
 
     def to_python(self, data):
-        print('to_python')
         # TODO: verify when this is called so we're not duplicating work
-        if data in self.empty_values:
-            return None
         # set up queryset outside atomic transaction
         self.refresh_data()
+        # handle deletes
+        self.do_deletion(data)
+        if data in self.empty_values:
+            return None
         with transaction.atomic():
             creates, updates = self.process_data(data)
-            print("creates", creates)
-            print("updates", updates)
             try:
                 self.queryset.model.objects.bulk_create(creates, batch_size=self.batch_size)
             except Exception as e:
@@ -153,5 +155,4 @@ class SilicaModelFormArrayField(forms.Field):
                 self.errors.append(f"There was an error updating existing objects. {repr(e)}")
         # force form to re-do queryset and re-calculate initial values so that newly created & updated data is displayed on refresh
         self._queryset = None
-        print(self.errors)
         return data
