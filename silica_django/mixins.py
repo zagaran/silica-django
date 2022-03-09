@@ -29,8 +29,8 @@ class JsonSchemaMixin(JsonSchemaUtils):
         # todo: differentiate between arrays of related items and a multi field (e.g. tags)
         elif isinstance(field, fields.SilicaModelFormArrayField):
             field_type = "array"
-            if field.instantiated_forms:
-                item_schema = field.instantiated_forms[0].get_schema()
+            if field._instantiated_forms:
+                item_schema = field._instantiated_forms[0].get_schema()
             else:
                 # there are no existing sub-items, instantiate the form to get the schema
                 item_schema = field.instance_form().get_schema()

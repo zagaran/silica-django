@@ -1,14 +1,3 @@
-"""
-
-- ordering elements
-- new elements
-- specify primary key
-
-    users = SilicaFormArrayField(UserEditForm, 
-        lambda organization: User.objects.filter(user_info__organization=organization), 
-        delete_override=lambda user: if user.id..., **kwargs)
-
-"""
 from collections import defaultdict
 
 from django import forms
@@ -25,50 +14,62 @@ class SilicaModelFormArrayField(forms.Field):
         Array saves are done in a single transaction. Any object which already has a primary key field gets updated; 
         any object without a primary key field gets created. Any object in the queryset whose value is not present in
         the data gets deleted (this may change).
-        
+
         To customize the behavior of this field, subclass it and implement your own handler functions as needed.
 
     """
 
-    def __init__(self, *args, identifier_field='pk', batch_size=200, **kwargs):
+    instance_form = None
+    identifier_field = 'pk'
+    queryset = None
+    batch_size = 200
+
+    _instantiated_forms = []
+    # this value must be set by the initialization of the form
+    _parent_instance = None
+    # the list of update errors by pk of object
+    _update_errors = defaultdict(list)
+    # the list of errors for this field (database errors)
+    _errors = []
+    _qs_lookup = None
+
+    def __init__(self, *args, queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.instance_form:
             raise NotImplementedError("You must define instance_form to use this field")
         if not isinstance(self.instance_form, forms.models.ModelFormMetaclass):
             # TODO: figure out why we can't just check for forms.ModelForm and document the reason
             raise TypeError(f"instance_form must be a model form, not {type(self.instance_form)}")
-        self.instantiated_forms = []
-        self.identifier_field = identifier_field
-        # this value must be set by the initialization of the form
-        self.parent_instance = None
-        self._queryset = None
-        self.batch_size = batch_size
-        # the list of update errors by pk of object
-        self.update_errors = defaultdict(list)
-        # the list of errors for this field (database errors)
-        self.errors = []
+        if queryset:
+            self.queryset = queryset
 
     def get_queryset(self):
-        return self.instance_form._meta.model.objects.all()
+        if self.queryset:
+            # this should force a refresh of the queryset
+            return self.queryset.all()
+        else:
+            return self.instance_form._meta.model.objects.all()
 
     @property
     def qs_lookup(self):
-        return {item[self.identifier_field]: item for item in self.queryset}
+        if not self._qs_lookup:
+            self._qs_lookup = {item[self.identifier_field]: item for item in self.queryset}
+        return self._qs_lookup
 
     def process_data(self, data):
         updates = []
         creates = []
         for item in data:
             # the identifier field will either be the empty string or the correct value for the object
-            pk = item[self.identifier_field]
+            pk = item.pop(self.identifier_field, None)
             if pk:
                 # if the item already has a pk, we are updating
-                update = self.handle_update(pk, item)
+                update = self.handle_update(pk, self.clean_data(item))
                 if update:
                     updates.append(update)
             else:
                 # if the item does not have a pk, we are creating
-                create = self.do_create(item)
+                create = self.handle_create(self.clean_data(item))
                 if create:
                     creates.append(create)
         return creates, updates
@@ -76,7 +77,7 @@ class SilicaModelFormArrayField(forms.Field):
     def do_deletion(self, data):
         items_to_delete = self.get_items_to_delete(data)
         self.handle_delete(items_to_delete)
-        
+
     def get_items_to_delete(self, data):
         if not data:
             data = []
@@ -84,56 +85,46 @@ class SilicaModelFormArrayField(forms.Field):
         item_keys = [datum[key] for datum in data if datum[key]]
         return self.queryset.exclude(**{f'{key}__in': item_keys})
 
+    def clean_data(self, item):
+        # by default, do nothing; exists so that we can hook into it as necessary. Note that this is called before 
+        # both handle_create() and handle_update()
+        return item
+
     def handle_delete(self, qs):
         try:
             qs.delete()
         except Exception as e:
-            self.errors.append(f"There was an error deleting items. {repr(e)}")
-
-    def clean_data_for_create(self, item):
-        # pk has default value of "" since the field must exist in the form; if it exists, clear it
-        del item[self.identifier_field]
-        return item
-
-    def do_create(self, item):
-        item = self.clean_data_for_create(item)
-        return self.handle_create(item)
+            self._errors.append(f"There was an error deleting items. {repr(e)}")
 
     def handle_create(self, item):
-        cleaned_data, errors = self.validate_against_form(item)
-        if not errors:
-            new_item = self.queryset.model(**cleaned_data)
+        form = self.validate_against_form(item)
+        if not form.errors:
+            new_item = self.queryset.model(**form.cleaned_data)
             return new_item
         else:
-            self.errors.append(f"There was an error creating an item. {errors}")
+            self._errors.append(f"There was an error creating an item. {form.errors}")
             return None
 
     def handle_update(self, pk, item):
         instance = self.qs_lookup[pk]
-        cleaned_data, errors = self.validate_against_form(item, instance=instance)
-        if not errors:
-            return self.queryset.model(**cleaned_data, **{self.identifier_field: pk})
+        form = self.validate_against_form(item, instance=instance)
+        if not form.errors:
+            return self.queryset.model(**form.cleaned_data, **{self.identifier_field: pk})
         else:
-            self.update_errors[pk].append(errors)
+            self._update_errors[pk].append(form.errors)
             return None
 
-    @property
-    def queryset(self):
-        if self._queryset is None:
-            self.refresh_data()
-        return self._queryset
-
     def refresh_data(self):
-        self._queryset = self.get_queryset()
-        self.instantiated_forms = [self.instance_form(instance=instance) for instance in self._queryset]
+        self.queryset = self.get_queryset()
+        self._instantiated_forms = [self.instance_form(instance=instance) for instance in self.queryset]
         self.initial = [{**form.initial, f'{self.identifier_field}': getattr(form.instance, self.identifier_field)}
-                        for form in self.instantiated_forms]
+                        for form in self._instantiated_forms]
 
     def validate_against_form(self, form_data, instance=None):
         """ Ensure that data being passed from frontend validates against form """
         form = self.instance_form(form_data, instance=instance)
         form.is_valid()
-        return form.cleaned_data, form.errors
+        return form
 
     def to_python(self, data):
         # TODO: verify when this is called so we're not duplicating work
@@ -148,11 +139,11 @@ class SilicaModelFormArrayField(forms.Field):
             try:
                 self.queryset.model.objects.bulk_create(creates, batch_size=self.batch_size)
             except Exception as e:
-                self.errors.append(f"There was an error creating new objects. {repr(e)}")
+                self._errors.append(f"There was an error creating new objects. {repr(e)}")
             try:
                 self.queryset.model.objects.bulk_update(updates, self.instance_form._meta.fields, batch_size=self.batch_size)
             except Exception as e:
-                self.errors.append(f"There was an error updating existing objects. {repr(e)}")
+                self._errors.append(f"There was an error updating existing objects. {repr(e)}")
         # force form to re-do queryset and re-calculate initial values so that newly created & updated data is displayed on refresh
-        self._queryset = None
+        self.refresh_data()
         return data
