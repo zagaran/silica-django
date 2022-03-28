@@ -23,10 +23,10 @@ class SilicaModelFormArrayField(forms.Field):
     identifier_field = 'pk'
     queryset = None
     batch_size = 200
+    # this value must be set by the initialization of the form
+    parent_instance = None
 
     _instantiated_forms = []
-    # this value must be set by the initialization of the form
-    _parent_instance = None
     # the list of update errors by pk of object
     _update_errors = defaultdict(list)
     # the list of errors for this field (database errors)

@@ -9,30 +9,49 @@ class UIEffects:
 
 
 class Condition(JsonSchemaUtils):
-    arguments = None
+    """
+    Conditions take the following form:
+        Condition(key1=value1, key2=value2, ...)
+    Examples:
+        And(key1=1, key2='and') -> evaluates to True if key1 == 1 and key2 == 'and'
+        Or(key1=1, key2=2) -> evaluates to True if key1 == 1 or key2 == 2
+    Conditions are also composable, e.g.
+        Or(And(key1=1, key2=1), key2=3) -> evaluates to True if (key1 == 1 and key2 == 1) or key2 == 3
+
+    The JsonSchema Condition spec is here: https://json-schema.org/understanding-json-schema/reference/combining.html
+
+    """
+
+    args = None
     schema_key = None
+    kwargs = None
 
-    def __init__(self, *args):
-        self.arguments = args
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
 
-    def _get_schema_for_argument(self, arg):
-        if isinstance(arg, Condition):
-            return arg._get_condition_schema()
-        elif isinstance(arg, dict):
-            # if the argument is a dictionary, we are in a top-level case
-            return {
-                "type": "object",
-                self.schema_key: [
-                    {"properties": {key: self._get_schema_for_argument(val)}}
-                    for key, val in arg.items()]
-            }
-        else:
-            return self.value_as_jsonschema(arg)
-
-    def _get_condition_schema(self):
+    def get_condition_schema(self):
+        schema = []
+        if self.args:
+            schema = self._process_args()
+        if self.kwargs:
+            schema.append(self._process_kwargs())
         return {
-            self.schema_key: [self._get_schema_for_argument(arg) for arg in self.arguments]
+            self.schema_key: schema
         }
+
+    def _process_kwargs(self):
+        # kwargs are direct assignments of keys to values, so we can just return a dictionary
+        return {
+            "type": "object",
+            "properties": {key: self.value_as_jsonschema(val) for key, val in self.kwargs.items()}
+        }
+
+    def _process_args(self):
+        # args can only be other conditions
+        return [
+            arg.get_condition_schema() for arg in self.args
+        ]
 
 
 class Or(Condition):
@@ -46,42 +65,52 @@ class And(Condition):
 class Not(Condition):
     schema_key = "not"
 
-    def _get_condition_schema(self):
+    def get_condition_schema(self):
+        # the Not JsonSchema object has to be specially formatted
+        schema = {}
+        if self.kwargs:
+            schema.update({
+                **self._process_kwargs(),
+            })
+        for arg in self.args:
+            schema.update(**arg.get_condition_schema())
         return {
-            self.schema_key: self._get_schema_for_argument(self.arguments)
+            self.schema_key: schema
         }
 
 
 class Rule(JsonSchemaUtils):
-    argument = None
+    """
+        Rules take in any number of conditions as args; any kwargs are treated as a single And, i.e. And(**kwargs)
+
+        In order to support this behavior, all conditions are wrapped in an Or.
+    """
+    args = None
     effect = None
     custom_schema = None
+    kwargs = None
 
-    def __init__(self, argument):
-        # argument is either a dictionary or a Condition
-        self.argument = argument
-
-    def _get_schema_for_argument(self, arg):
-        if isinstance(arg, Condition):
-            return arg._get_condition_schema()
-        else:
-            # by default, behavior is an AND
-            return self._get_schema_for_argument(And(self.argument))
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
 
     def get_schema(self, full_schema=True):
-        if self.custom_schema:
-            return self.custom_schema
+        schema_args = []
+        if len(self.args):
+            schema_args += list(self.args)
+        if len(self.kwargs):
+            schema_args.append(And(**self.kwargs))
+        schema = Or(*schema_args).get_condition_schema()
         if full_schema:
-            schema = {
+            return {
                 "effect": self.effect,
                 "condition": {
                     "scope": "#",
-                    "schema": self._get_schema_for_argument(self.argument)
+                    "schema": schema
                 }
             }
         else:
-            schema = self._get_schema_for_argument(self.argument)
-        return schema
+            return schema
 
 
 class ShowIf(Rule):
