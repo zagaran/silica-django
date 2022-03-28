@@ -92,15 +92,13 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             elements.append(element)
         return {"elements": elements}
 
-    def get_schema(self, full_schema=True):
+    def get_schema(self):
         """ Schema is used by the frontend to validate rules """
         # TODO: refine this to support more complex jsonschema rules and to (perhaps) simplify redundant rules
         properties = {
-                field_name: self._django_to_jsonschema_field(field_name, field)
-                for field_name, field in self.fields.items()
-            }
-        if not full_schema:
-            return properties
+            field_name: self._django_to_jsonschema_field(field_name, field)
+            for field_name, field in self.fields.items()
+        }
         return {
             "type": "object",
             "properties": properties

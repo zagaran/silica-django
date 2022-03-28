@@ -69,7 +69,7 @@ class TestConditions(BaseTestCase):
                     }
             }
         })
-        
+
     def test_not_composable(self):
         not_1 = Not(Or(key1=1, key2=1))
         self.assertEqualAsStrings(not_1.get_condition_schema(), {

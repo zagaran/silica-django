@@ -2,6 +2,7 @@ from django import forms
 
 from silica_django import fields
 from silica_django.utils.jsonschema import JsonSchemaUtils
+from silica_django.widgets import SilicaRenderer
 
 
 class JsonSchemaMixin(JsonSchemaUtils):
@@ -73,6 +74,6 @@ class JsonSchemaMixin(JsonSchemaUtils):
         # add rules
         if hasattr(self.Meta, 'rules') and field_name in self.Meta.rules:
             ui_schema['rule'] = self.Meta.rules[field_name].get_schema()
-        if hasattr(self.Meta, 'custom_components') and field_name in self.Meta.custom_components:
-            ui_schema['options']['customComponentName'] = self.Meta.custom_components[field_name]
+        if isinstance(field.widget, SilicaRenderer):
+            ui_schema['options']['customComponentName'] = field.widget.custom_component_name
         return ui_schema

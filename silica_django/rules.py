@@ -94,23 +94,20 @@ class Rule(JsonSchemaUtils):
         self.args = args
         self.kwargs = kwargs
 
-    def get_schema(self, full_schema=True):
+    def get_schema(self):
         schema_args = []
         if len(self.args):
             schema_args += list(self.args)
         if len(self.kwargs):
             schema_args.append(And(**self.kwargs))
         schema = Or(*schema_args).get_condition_schema()
-        if full_schema:
-            return {
-                "effect": self.effect,
-                "condition": {
-                    "scope": "#",
-                    "schema": schema
-                }
+        return {
+            "effect": self.effect,
+            "condition": {
+                "scope": "#",
+                "schema": schema
             }
-        else:
-            return schema
+        }
 
 
 class ShowIf(Rule):
