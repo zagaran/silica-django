@@ -38,7 +38,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     def _setup_array_fields(self):
         for field in self.fields.values():
             if isinstance(field, SilicaModelFormArrayField):
-                field._parent_instance = self.instance
+                field.parent_instance = self.instance
 
     def _extract_array_info(self, raw_data):
         # iterate over raw data keys; if any are an array field, then process it
@@ -67,12 +67,13 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if isinstance(field, SilicaModelFormArrayField):
                 field.refresh_data()
             # first check instance
-            if self.instance and hasattr(self.instance, field_name) and not isinstance(field, SilicaModelFormArrayField):
+            if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
+                                                                                       SilicaModelFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
-            elif field.initial:
-                initial[field_name] = field.initial
             elif field_name in self.initial:
                 initial[field_name] = self.initial[field_name]
+            else:
+                initial[field_name] = field.initial
         return initial
 
     def get_ui_schema(self):
