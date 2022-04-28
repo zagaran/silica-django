@@ -1,6 +1,7 @@
 from django import forms
 
 from silica_django import fields
+from silica_django.fields import SilicaSubFormArrayField
 from silica_django.utils.jsonschema import JsonSchemaUtils
 from silica_django.widgets import SilicaRenderer
 
@@ -28,7 +29,7 @@ class JsonSchemaMixin(JsonSchemaUtils):
         elif isinstance(field, forms.BooleanField):
             field_type = "boolean"
         # todo: differentiate between arrays of related items and a multi field (e.g. tags)
-        elif isinstance(field, fields.SilicaModelFormArrayField):
+        elif isinstance(field, fields.SilicaSubFormArrayField):
             field_type = "array"
             if field._instantiated_forms:
                 item_schema = field._instantiated_forms[0].get_schema()
@@ -55,12 +56,14 @@ class JsonSchemaMixin(JsonSchemaUtils):
             field_type = "string"
             if not hasattr(field, 'choices'):
                 field_kwargs["oneOf"] = [{'const': str(value), 'title': title} for (value, title) in field.widget.choices]
+        if hasattr(self, 'Meta') and hasattr(self.Meta, 'schema_options') and field_name in self.Meta.schema_options:
+            field_kwargs['options'].update(self.Meta.schema_options[field_name])
         return {
             "type": field_type,
             **field_kwargs
         }
 
-    def _django_widget_to_ui_schema(self, field_name, field):
+    def _django_widget_to_ui_schema(self, field_name, field, rules=None, uischema_options=None):
         ui_schema = {
             'options': {}
         }
@@ -72,8 +75,13 @@ class JsonSchemaMixin(JsonSchemaUtils):
         if isinstance(field.widget, forms.Textarea):
             ui_schema['options']['multi'] = True
         # add rules
-        if hasattr(self.Meta, 'rules') and field_name in self.Meta.rules:
-            ui_schema['rule'] = self.Meta.rules[field_name].get_schema()
+        if rules and field_name in rules:
+            ui_schema['rule'] = rules[field_name].get_schema()
         if isinstance(field.widget, SilicaRenderer):
             ui_schema['options']['customComponentName'] = field.widget.custom_component_name
+        if isinstance(field, SilicaSubFormArrayField):
+            ui_schema['options']['minInstances'] = field.min_instances
+            ui_schema['options']['maxInstances'] = field.max_instances
+        if uischema_options and field_name in uischema_options:
+            ui_schema['options'].update(uischema_options[field_name])
         return ui_schema

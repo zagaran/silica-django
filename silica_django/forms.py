@@ -2,8 +2,8 @@ from collections import defaultdict
 
 from django import forms
 
-from silica_django.fields import SilicaModelFormArrayField
-from silica_django.layout import Control
+from silica_django.fields import SilicaSubFormArrayField
+from silica_django.layout import Control, VerticalLayout
 from silica_django.mixins import JsonSchemaMixin
 
 
@@ -15,7 +15,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
 
         Optional Meta fields:
         @rules - a mapping of fields to the rules which should be applied to controls.
-        @custom_layout - a custom SilicaLayout. This will be used instead of generating a layout from your fields. 
+        @layout - a custom SilicaLayout. This will be used instead of generating a layout from your fields. 
                          Note that rules will still be applied.
         @custom_ui_schema - a mapping of fields to a dictionary matching the UISchema pattern.
         @custom_components - a mapping of fields to the name of the custom Control renderer you want to use.
@@ -37,7 +37,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
 
     def _setup_array_fields(self):
         for field in self.fields.values():
-            if isinstance(field, SilicaModelFormArrayField):
+            if isinstance(field, SilicaSubFormArrayField):
                 field.parent_instance = self.instance
 
     def _extract_array_info(self, raw_data):
@@ -64,11 +64,11 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     def get_data_for_template(self):
         initial = {}
         for field_name, field in self.fields.items():
-            if isinstance(field, SilicaModelFormArrayField):
+            if isinstance(field, SilicaSubFormArrayField):
                 field.refresh_data()
             # first check instance
             if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
-                                                                                       SilicaModelFormArrayField):
+                                                                                       SilicaSubFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
             elif field_name in self.initial:
                 initial[field_name] = self.initial[field_name]
@@ -81,17 +81,21 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         rules = {}
         if hasattr(self.Meta, 'rules'):
             rules = self.Meta.rules
-        if hasattr(self.Meta, 'custom_layout'):
-            return self.Meta.custom_layout.get_schema(rules)
+        if hasattr(self.Meta, 'uischema_options'):
+            uischema_options = self.Meta.uischema_options
+        else:
+            uischema_options = {}
+        if hasattr(self.Meta, 'layout'):
+            return self.Meta.layout.get_schema(rules, fields=self.fields, uischema_options=uischema_options)
         elements = []
         for field_name, field in self.fields.items():
             if hasattr(self.Meta, 'custom_ui_schema') and field_name in self.Meta.custom_ui_schema:
                 element = self.Meta.custom_ui_schema[field_name]
             else:
                 ui_kwargs = self._django_widget_to_ui_schema(field_name, field)
-                element = Control(field_name, **ui_kwargs).get_schema(rules)
+                element = Control(field_name, **ui_kwargs)
             elements.append(element)
-        return {"elements": elements}
+        return VerticalLayout(*elements).get_schema(rules, uischema_options=uischema_options)
 
     def get_schema(self):
         """ Schema is used by the frontend to validate rules """
@@ -104,3 +108,12 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             "type": "object",
             "properties": properties
         }
+
+
+class SilicaModelFormMixin(SilicaFormMixin, forms.ModelForm):
+    def save(self, commit=True):
+        # save array fields before continuing with save
+        for field in self.fields.values():
+            if isinstance(field, SilicaSubFormArrayField):
+                field.do_save()
+        return super().save(commit=True)
