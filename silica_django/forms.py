@@ -116,4 +116,4 @@ class SilicaModelFormMixin(SilicaFormMixin, forms.ModelForm):
         for field in self.fields.values():
             if isinstance(field, SilicaSubFormArrayField):
                 field.do_save()
-        return super().save(commit=True)
+        return super().save(commit=commit)
