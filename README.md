@@ -12,3 +12,6 @@ A sample project demonstrating simple usage of this library, using the companion
 
 ## Tests
 There is a (relatively sparse) test suite which comes with this library to prevent regression. To run it, simply run `python silica_django/tests.py` from the root directory.
+
+## Documentation
+There is a combined documentation repository for all Silica libraries located at [Silica-Docs](https://www.github.com/zagaran/silica-docs).
