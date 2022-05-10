@@ -1,14 +1,14 @@
 from django import forms
 
 from silica_django import fields
-from silica_django.fields import SilicaSubFormArrayField
+from silica_django.fields import SilicaSubFormArrayField, SilicaSubmitInputField
 from silica_django.utils.jsonschema import JsonSchemaUtils
 from silica_django.widgets import SilicaRenderer
 
 
 class JsonSchemaMixin(JsonSchemaUtils):
     """ Contains utility functions for interfacing between native python/django and jsonschema """
-    def _django_to_jsonschema_field(self, field_name, field):
+    def _django_to_jsonschema_field(self, field_name, field, field_config=None):
         # most field types are string by default
         field_type = "string"
         # format is only required for some special types e.g. date
@@ -42,7 +42,7 @@ class JsonSchemaMixin(JsonSchemaUtils):
                 }
             field_kwargs['items'] = {
                 **item_schema,
-            }            
+            }
         if hasattr(field, 'choices'):
             field_kwargs["oneOf"] = [{'const': value, 'title': title} for (value, title) in field.choices]
         # special checks
@@ -56,14 +56,20 @@ class JsonSchemaMixin(JsonSchemaUtils):
             field_type = "string"
             if not hasattr(field, 'choices'):
                 field_kwargs["oneOf"] = [{'const': str(value), 'title': title} for (value, title) in field.widget.choices]
-        if hasattr(self, 'Meta') and hasattr(self.Meta, 'schema_options') and field_name in self.Meta.schema_options:
-            field_kwargs['options'].update(self.Meta.schema_options[field_name])
+        if field_config:
+            if field_config.schema:
+                field_kwargs.update(field_config.schema)
+        if isinstance(field, SilicaSubFormArrayField):
+            if field.min_instances:
+                field_kwargs['minItems'] = field.min_instances
+            if field.max_instances:
+                field_kwargs['maxItems'] = field.max_instances
         return {
             "type": field_type,
             **field_kwargs
         }
 
-    def _django_widget_to_ui_schema(self, field_name, field, rules=None, uischema_options=None):
+    def _django_widget_to_ui_schema(self, field, field_config=None):
         ui_schema = {
             'options': {}
         }
@@ -74,14 +80,17 @@ class JsonSchemaMixin(JsonSchemaUtils):
         # special values for widgets
         if isinstance(field.widget, forms.Textarea):
             ui_schema['options']['multi'] = True
-        # add rules
-        if rules and field_name in rules:
-            ui_schema['rule'] = rules[field_name].get_schema()
         if isinstance(field.widget, SilicaRenderer):
             ui_schema['options']['customComponentName'] = field.widget.custom_component_name
-        if isinstance(field, SilicaSubFormArrayField):
-            ui_schema['options']['minInstances'] = field.min_instances
-            ui_schema['options']['maxInstances'] = field.max_instances
-        if uischema_options and field_name in uischema_options:
-            ui_schema['options'].update(uischema_options[field_name])
+        if isinstance(field, SilicaSubmitInputField):
+            ui_schema['options']['format'] = 'submit'
+        # add rules and update uischema
+        if field_config:
+            if field_config.rule:
+                ui_schema['rule'] = field_config.rule.get_schema()
+            if field_config.uischema:
+                ui_opts = ui_schema['options']
+                ui_opts.update(field_config.uischema['options'])
+                ui_schema.update(field_config.uischema)
+                ui_schema['options'] = ui_opts
         return ui_schema

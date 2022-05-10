@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from django import forms
 
-from silica_django.fields import SilicaSubFormArrayField
+from silica_django.fields import SilicaSubFormArrayField, SilicaSubmitInputField
 from silica_django.layout import Control, VerticalLayout
 from silica_django.mixins import JsonSchemaMixin
 
@@ -21,6 +21,10 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         @custom_components - a mapping of fields to the name of the custom Control renderer you want to use.
 
      """
+    class Meta:
+        silica_config = None
+        layout = None
+
     def __init__(self, *args, **kwargs):
         # if we are intaking data from a POST, process it
         new_args = [*args]
@@ -35,6 +39,17 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         super().__init__(*new_args, **kwargs)
         self._setup_array_fields()
 
+    def get_silica_config(self):
+        if hasattr(self.Meta, 'silica_config'):
+            return self.Meta.silica_config
+        return None
+
+    def get_field_config(self, field_name):
+        silica_config = self.get_silica_config()
+        if silica_config:
+            return self.Meta.silica_config.get_field_config(field_name)
+        return None
+    
     def _setup_array_fields(self):
         for field in self.fields.values():
             if isinstance(field, SilicaSubFormArrayField):
@@ -61,6 +76,11 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         }
         return array_field_data
 
+    def get_errors_for_template(self):
+        return {
+            field_name: [e for e in errors] for field_name, errors in self.errors.items()
+        }
+
     def get_data_for_template(self):
         initial = {}
         for field_name, field in self.fields.items():
@@ -70,40 +90,37 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
                                                                                        SilicaSubFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
+            elif isinstance(field, SilicaSubmitInputField):
+                initial[field_name] = field.value
             elif field_name in self.initial:
                 initial[field_name] = self.initial[field_name]
             else:
+                initial[field_name] = field.initial
+            # if a model is new, use the initial value of the field (if it exists) to override
+            if self.instance._state.adding and field.initial:
                 initial[field_name] = field.initial
         return initial
 
     def get_ui_schema(self):
         # this function is only ever called after the form has been instantiated, so we have access to self.fields
-        rules = {}
-        if hasattr(self.Meta, 'rules'):
-            rules = self.Meta.rules
-        if hasattr(self.Meta, 'uischema_options'):
-            uischema_options = self.Meta.uischema_options
-        else:
-            uischema_options = {}
+        
         if hasattr(self.Meta, 'layout'):
-            return self.Meta.layout.get_schema(rules, fields=self.fields, uischema_options=uischema_options)
+            return self.Meta.layout.get_schema(self)
         elements = []
         for field_name, field in self.fields.items():
-            if hasattr(self.Meta, 'custom_ui_schema') and field_name in self.Meta.custom_ui_schema:
-                element = self.Meta.custom_ui_schema[field_name]
-            else:
-                ui_kwargs = self._django_widget_to_ui_schema(field_name, field)
-                element = Control(field_name, **ui_kwargs)
+            ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
+            element = Control(field_name, **ui_kwargs)
             elements.append(element)
-        return VerticalLayout(*elements).get_schema(rules, uischema_options=uischema_options)
+        return VerticalLayout(*elements).get_schema(self)
 
     def get_schema(self):
         """ Schema is used by the frontend to validate rules """
         # TODO: refine this to support more complex jsonschema rules and to (perhaps) simplify redundant rules
         properties = {
-            field_name: self._django_to_jsonschema_field(field_name, field)
+            field_name: self._django_to_jsonschema_field(field_name, field, field_config=self.get_field_config(field_name))
             for field_name, field in self.fields.items()
         }
+        # TODO: support error messages https://stackoverflow.com/questions/65303161/how-can-i-override-default-error-messages-text-in-json-forms
         return {
             "type": "object",
             "properties": properties

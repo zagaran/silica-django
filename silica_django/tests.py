@@ -1,5 +1,6 @@
 import unittest
 
+from silica_django.config import SilicaConfig, SilicaFieldConfig
 from silica_django.utils.jsonschema import JsonSchemaUtils
 
 from silica_django.rules import Or, And, Not, ShowIf
@@ -187,6 +188,46 @@ class TestJsonSchemaTranslation(BaseTestCase):
         self.assertEqualAsStrings(JsonSchemaUtils.value_as_jsonschema(1), {"const": 1})
         self.assertEqualAsStrings(JsonSchemaUtils.value_as_jsonschema([1]), {"enum": [1]})
 
+
+class TestSilicaConfig(BaseTestCase):
+    def assertKwargsCorrectlyProcessed(self):
+        """ Assert that the kwargs passed to the SilicaConfig are properly formatted internally """
+        config = SilicaConfig(
+            field1=SilicaFieldConfig(
+                maximum=1,
+                minimum=2,
+                default=2,
+                min_length=1,
+                max_length=3,
+                description="a description",
+                type="object",
+                schema_format="int",
+                required=["field2"],
+                additional_properties=True,
+                label="oh yeah",
+            )
+        )
+        
+        
+        return True
+    
+    def assertUISchemaCustomize(self):
+        return True
+    
+    def assertUISchemaOverride(self):
+        return True
+    
+    def assertSchemaCustomize(self):
+        return True
+    
+    def assertSchemaOverride(self):
+        return True
+    
+    def assertRule(self):
+        return True
+    
+    def assertComplexUISchema(self):
+        return True
 
 if __name__ == "__main__":
     unittest.main()

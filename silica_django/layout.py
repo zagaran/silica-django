@@ -37,19 +37,24 @@ class Control(SilicaUiElement, JsonSchemaMixin):
         })
         self.kwargs.update(kwargs)
 
-    def get_schema(self, rules, fields=None, uischema_options=None):
-        if self.field_name in rules:
-            self.kwargs['rule'] = rules[self.field_name].get_schema()
-        if fields and self.field_name in fields:
-            self.kwargs.update(self._django_widget_to_ui_schema(self.field_name, fields[self.field_name], rules=rules, uischema_options=uischema_options))
+    def get_schema(self, silica_form):
+        field_config = silica_form.get_field_config(self.field_name)
+        if field_config:
+            if field_config.rule:
+                self.kwargs['rule'] = field_config.rule.get_schema()
+            self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name], field_config=field_config))
+        else:
+            self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name]))
         return self.kwargs
 
 
 class SilicaLayout(SilicaUiElement):
     elements = None
+    rule = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, rule=None, **kwargs):
         super().__init__(**kwargs)
+        self.rule = rule
         # args should be a list of SilicaUiElements
         self.elements = [self._process_arg(a) for a in args]
         self.kwargs.update({'type': self.type})
@@ -64,10 +69,12 @@ class SilicaLayout(SilicaUiElement):
         else:
             raise Exception(f"Unhandled type {type(arg)}")
 
-    def get_schema(self, rules, fields=None, uischema_options=None):
+    def get_schema(self, silica_form):
         schema = self.kwargs
         # flatten elements
-        schema['elements'] = [element.get_schema(rules, fields=fields, uischema_options=uischema_options) for element in self.elements]
+        schema['elements'] = [element.get_schema(silica_form) for element in self.elements]
+        if self.rule:
+            schema['rule'] = self.rule.get_schema()
         return schema
 
 
@@ -90,10 +97,10 @@ class Group(SilicaLayout):
 class Categorization(SilicaLayout):
     type = SilicaUiElementType.categorization
 
-    def get_schema(self, rules, fields=None, uischema_options=None):
+    def get_schema(self, silica_form):
         if any([e.type != SilicaUiElementType.category for e in self.elements]):
             raise Exception("Categorization elements may not have any non-Category direct children.")
-        return super().get_schema(rules, fields=fields, uischema_options=uischema_options)
+        return super().get_schema(silica_form)
 
 
 class Category(SilicaLayout):
