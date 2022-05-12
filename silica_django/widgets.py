@@ -8,3 +8,7 @@ class SilicaRenderer(django.forms.Widget):
         super().__init__(*args, **kwargs)
         if custom_component_name:
             self.custom_component_name = custom_component_name
+
+
+class SilicaSubmitRenderer(SilicaRenderer, django.forms.CharField):
+    custom_component_name = "silica-submit-renderer"

@@ -210,20 +210,3 @@ class SilicaSubFormArrayField(forms.Field):
         if data in self.empty_values:
             return None
         return self.data_as_forms(data)
-
-
-class SilicaSubmitInputField(forms.Field):
-    """
-    Exists for the circumstance where a submit field needs to be present in multiple places in a form or when
-    special validation rules should apply to the submit field (e.g. programmatically showing or enabling)
-
-    """
-    value = None
-
-    def __init__(self, *args, value=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.value = value
-
-    def to_python(self, value):
-        # we don't care if the value has changed on the frontend
-        return self.value

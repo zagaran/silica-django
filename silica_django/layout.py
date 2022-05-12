@@ -1,3 +1,6 @@
+import random
+import string
+
 from silica_django.mixins import JsonSchemaMixin
 
 
@@ -8,6 +11,7 @@ class SilicaUiElementType:
     category = "Category"
     categorization = "Categorization"
     control = "Control"
+    custom_element = "CustomElement"
 
 
 class SilicaUiElement:
@@ -15,11 +19,14 @@ class SilicaUiElement:
     kwargs = None
     field_name = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         if self.kwargs is None:
             self.kwargs = {
                 **kwargs
             }
+            
+    def get_ui_schema(self, silica_form):
+        raise NotImplemented
 
 
 class Control(SilicaUiElement, JsonSchemaMixin):
@@ -37,11 +44,11 @@ class Control(SilicaUiElement, JsonSchemaMixin):
         })
         self.kwargs.update(kwargs)
 
-    def get_schema(self, silica_form):
+    def get_ui_schema(self, silica_form):
         field_config = silica_form.get_field_config(self.field_name)
         if field_config:
             if field_config.rule:
-                self.kwargs['rule'] = field_config.rule.get_schema()
+                self.kwargs['rule'] = field_config.rule.get_ui_schema()
             self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name], field_config=field_config))
         else:
             self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name]))
@@ -69,12 +76,12 @@ class SilicaLayout(SilicaUiElement):
         else:
             raise Exception(f"Unhandled type {type(arg)}")
 
-    def get_schema(self, silica_form):
+    def get_ui_schema(self, silica_form):
         schema = self.kwargs
         # flatten elements
-        schema['elements'] = [element.get_schema(silica_form) for element in self.elements]
+        schema['elements'] = [element.get_ui_schema(silica_form) for element in self.elements]
         if self.rule:
-            schema['rule'] = self.rule.get_schema()
+            schema['rule'] = self.rule.get_ui_schema()
         return schema
 
 
@@ -97,10 +104,10 @@ class Group(SilicaLayout):
 class Categorization(SilicaLayout):
     type = SilicaUiElementType.categorization
 
-    def get_schema(self, silica_form):
+    def get_ui_schema(self, silica_form):
         if any([e.type != SilicaUiElementType.category for e in self.elements]):
             raise Exception("Categorization elements may not have any non-Category direct children.")
-        return super().get_schema(silica_form)
+        return super().get_ui_schema(silica_form)
 
 
 class Category(SilicaLayout):
@@ -110,3 +117,32 @@ class Category(SilicaLayout):
     def __init__(self, label, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.kwargs.update({'label': label})
+
+
+class CustomElement(SilicaUiElement):
+    type = SilicaUiElementType.custom_element
+    content = None
+    rule = None
+    _id = None
+
+    def __init__(self, content, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        letters = string.ascii_lowercase
+        self._id = ''.join(random.choice(letters) for _ in range(10))
+        self.kwargs.update({
+            'name': self._id,
+            'type': self.type,
+            'scope': '#/'
+        })
+        self.kwargs.update(kwargs)
+        self.content = content
+
+    def get_mapped_content(self):
+        """ returns a dictionary of this element's generated id to the content it should render """
+        return {self._id: self.content}
+
+    def get_ui_schema(self, silica_form):
+        schema = self.kwargs
+        if self.rule:
+            schema['rule'] = self.rule.get_ui_schema(silica_form)
+        return schema

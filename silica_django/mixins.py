@@ -1,7 +1,7 @@
 from django import forms
 
 from silica_django import fields
-from silica_django.fields import SilicaSubFormArrayField, SilicaSubmitInputField
+from silica_django.fields import SilicaSubFormArrayField
 from silica_django.utils.jsonschema import JsonSchemaUtils
 from silica_django.widgets import SilicaRenderer
 
@@ -32,10 +32,10 @@ class JsonSchemaMixin(JsonSchemaUtils):
         elif isinstance(field, fields.SilicaSubFormArrayField):
             field_type = "array"
             if field._instantiated_forms:
-                item_schema = field._instantiated_forms[0].get_schema()
+                item_schema = field._instantiated_forms[0].get_ui_schema()
             else:
                 # there are no existing sub-items, instantiate the form to get the schema
-                item_schema = field.instance_form().get_schema()
+                item_schema = field.instance_form().get_ui_schema()
             item_schema["properties"][field.identifier_field] = {
                     "type": "number",
                     "hidden": True
@@ -82,12 +82,10 @@ class JsonSchemaMixin(JsonSchemaUtils):
             ui_schema['options']['multi'] = True
         if isinstance(field.widget, SilicaRenderer):
             ui_schema['options']['customComponentName'] = field.widget.custom_component_name
-        if isinstance(field, SilicaSubmitInputField):
-            ui_schema['options']['format'] = 'submit'
         # add rules and update uischema
         if field_config:
             if field_config.rule:
-                ui_schema['rule'] = field_config.rule.get_schema()
+                ui_schema['rule'] = field_config.rule.get_ui_schema()
             if field_config.uischema:
                 ui_opts = ui_schema['options']
                 ui_opts.update(field_config.uischema['options'])

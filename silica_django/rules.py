@@ -94,7 +94,7 @@ class Rule(JsonSchemaUtils):
         self.args = args
         self.kwargs = kwargs
 
-    def get_schema(self):
+    def get_rule_schema(self):
         schema_args = []
         if len(self.args):
             schema_args += list(self.args)

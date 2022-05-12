@@ -2,8 +2,8 @@ from collections import defaultdict
 
 from django import forms
 
-from silica_django.fields import SilicaSubFormArrayField, SilicaSubmitInputField
-from silica_django.layout import Control, VerticalLayout
+from silica_django.fields import SilicaSubFormArrayField
+from silica_django.layout import Control, VerticalLayout, CustomElement
 from silica_django.mixins import JsonSchemaMixin
 
 
@@ -90,8 +90,6 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
                                                                                        SilicaSubFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
-            elif isinstance(field, SilicaSubmitInputField):
-                initial[field_name] = field.value
             elif field_name in self.initial:
                 initial[field_name] = self.initial[field_name]
             else:
@@ -103,28 +101,40 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
 
     def get_ui_schema(self):
         # this function is only ever called after the form has been instantiated, so we have access to self.fields
-        
         if hasattr(self.Meta, 'layout'):
-            return self.Meta.layout.get_schema(self)
+            return self.Meta.layout.get_ui_schema(self)
         elements = []
         for field_name, field in self.fields.items():
             ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
             element = Control(field_name, **ui_kwargs)
             elements.append(element)
-        return VerticalLayout(*elements).get_schema(self)
+        return VerticalLayout(*elements).get_ui_schema(self)
 
-    def get_schema(self):
+    def get_data_schema(self):
         """ Schema is used by the frontend to validate rules """
         # TODO: refine this to support more complex jsonschema rules and to (perhaps) simplify redundant rules
+        # TODO: support error_message https://stackoverflow.com/questions/65303161/how-can-i-override-default-error-messages-text-in-json-forms
         properties = {
             field_name: self._django_to_jsonschema_field(field_name, field, field_config=self.get_field_config(field_name))
             for field_name, field in self.fields.items()
         }
-        # TODO: support error messages https://stackoverflow.com/questions/65303161/how-can-i-override-default-error-messages-text-in-json-forms
         return {
             "type": "object",
             "properties": properties
         }
+    
+    @property
+    def custom_elements(self):
+        """ Returns a list of CustomElement items in the form's Meta.layout """
+        if hasattr(self.Meta, 'layout'):
+            return list(filter(lambda e: isinstance(e, CustomElement), self.Meta.layout))
+        return []
+
+    def get_custom_elements_content(self):
+        custom_elements_content = {}
+        for element in self.custom_elements:
+            custom_elements_content.update(element.get_mapped_content)
+        return custom_elements_content
 
 
 class SilicaModelFormMixin(SilicaFormMixin, forms.ModelForm):

@@ -91,7 +91,7 @@ class TestConditions(BaseTestCase):
 class TestRules(BaseTestCase):
     def test_show_only_kwargs(self):
         rule = ShowIf(key1=1)
-        self.assertEqualAsStrings(rule.get_schema(), {
+        self.assertEqualAsStrings(rule.get_rule_schema(), {
             "effect": rule.effect,
             "condition": {
                 "scope": "#",
@@ -114,7 +114,7 @@ class TestRules(BaseTestCase):
 
     def test_show_only_args(self):
         rule = ShowIf(Or(key1=1, key2=1), And(key1=2, key2=3))
-        self.assertEqualAsStrings(rule.get_schema(), {
+        self.assertEqualAsStrings(rule.get_rule_schema(), {
             "effect": rule.effect,
             "condition": {
                 "scope": "#",
@@ -149,7 +149,7 @@ class TestRules(BaseTestCase):
 
     def test_show_args_and_kwargs(self):
         rule = ShowIf(And(key2=2, key3=3), key1=1)
-        self.assertEqualAsStrings(rule.get_schema(), {
+        self.assertEqualAsStrings(rule.get_rule_schema(), {
             "effect": rule.effect,
             "condition": {
                 "scope": "#",

@@ -11,4 +11,5 @@ def load_silica_form(form, form_id):
         "form_schema_key": form_id + "-schema",
         "form_ui_schema_key": form_id + "-ui-schema",
         "form_errors_key": form_id + "-errors",
+        "custom_elements_key": form_id + "-custom-elements",
     }
