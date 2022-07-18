@@ -51,7 +51,6 @@ class JsonSchemaMixin(JsonSchemaUtils):
         if field.disabled:
             field_kwargs['readOnly'] = True
         if isinstance(field.widget, forms.RadioSelect):
-            field_kwargs['options']['format'] = "radio"
             # for a radio select, everything is a string - we'll convert on the backend
             field_type = "string"
             if not hasattr(field, 'choices'):
@@ -82,6 +81,8 @@ class JsonSchemaMixin(JsonSchemaUtils):
             ui_schema['options']['multi'] = True
         if isinstance(field.widget, SilicaRenderer):
             ui_schema['options']['customComponentName'] = field.widget.custom_component_name
+        if isinstance(field.widget, forms.RadioSelect):
+            ui_schema['options']['format'] = "radio"
         # add rules and update uischema
         if field_config:
             if field_config.rule:
