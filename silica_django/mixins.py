@@ -32,10 +32,10 @@ class JsonSchemaMixin(JsonSchemaUtils):
         elif isinstance(field, fields.SilicaSubFormArrayField):
             field_type = "array"
             if field._instantiated_forms:
-                item_schema = field._instantiated_forms[0].get_ui_schema()
+                item_schema = field._instantiated_forms[0].get_data_schema()
             else:
                 # there are no existing sub-items, instantiate the form to get the schema
-                item_schema = field.instance_form().get_ui_schema()
+                item_schema = field.instance_form().get_data_schema()
             item_schema["properties"][field.identifier_field] = {
                     "type": "number",
                     "hidden": True
