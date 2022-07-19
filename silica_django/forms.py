@@ -43,7 +43,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             new_args = [raw_data, *args]
         if 'data' in kwargs:
             # it is also valid to pass data to a form as the data kwarg
-            orig_data = kwargs.pop('data', {})
+            orig_data = kwargs.pop('data') or {}
             array_keys, array_info = self._extract_array_info(orig_data)
             data = orig_data.copy()
             for key, values in array_info.items():
@@ -73,6 +73,8 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                 field.parent_instance = self.instance
 
     def _extract_array_info(self, raw_data):
+        if not raw_data:
+            return [], {}
         array_keys = []
         # iterate over raw data keys; if any are an array field, then process it
         array_items_by_name_and_count = defaultdict(lambda: defaultdict(dict))

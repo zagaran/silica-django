@@ -3,7 +3,6 @@ from collections import defaultdict
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from silica_django.forms import SilicaFormMixin
 
 
 class SilicaSubFormArrayField(forms.Field):
@@ -44,9 +43,8 @@ class SilicaSubFormArrayField(forms.Field):
         super().__init__(*args, **kwargs)
         if not self.instance_form:
             raise NotImplementedError("You must define instance_form to use this field")
-        if not isinstance(self.instance_form, forms.models.ModelFormMetaclass):
-            # TODO: figure out why we can't just check for forms.ModelForm and document the reason
-            raise TypeError(f"instance_form must be a model form, not {type(self.instance_form)}")
+        if not issubclass(self.instance_form, forms.models.ModelForm):
+            raise TypeError("instance_form must subclass ModelForm")
         if queryset:
             self.queryset = queryset
 
@@ -148,9 +146,11 @@ class SilicaSubFormArrayField(forms.Field):
             return None
 
     def _instantiate_form(self, data=None, instance=None):
+        # local import required to prevent cyclical imports
+        from silica_django.forms import SilicaFormMixin
         # if the form subclasses silica form, include parent_instance as a kwarg
         kwargs = {'data': data, 'instance': instance}
-        if isinstance(self.instance_form, SilicaFormMixin):
+        if issubclass(self.instance_form, SilicaFormMixin):
             kwargs['parent_instance'] = self.parent_instance
         return self.instance_form(**kwargs)
 
