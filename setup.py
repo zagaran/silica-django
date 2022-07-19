@@ -40,7 +40,7 @@ if sys.version < '3.0':
 
 setup(
     name="silica_django",
-    version="0.1.0-alpha-9",
+    version="0.1.0-alpha-10",
     packages=find_packages(),
 
     author="Zagaran, Inc.",
