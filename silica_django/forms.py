@@ -71,6 +71,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                 field.parent_instance = self.instance
 
     def _extract_array_info(self, raw_data):
+        array_keys = []
         # iterate over raw data keys; if any are an array field, then process it
         array_items_by_name_and_count = defaultdict(lambda: defaultdict(dict))
         for key, value in raw_data.items():
@@ -84,12 +85,13 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             count = split_key[1]
             field = split_key[2]
             array_items_by_name_and_count[array_field_name][count][field] = value
+            array_keys.append(key)
         # each array field should have its own list of objects
         array_field_data = {
             array_field_name: values_by_count.values()
             for array_field_name, values_by_count in array_items_by_name_and_count.items()
         }
-        return array_field_data
+        return array_keys, array_field_data
 
     def get_errors_for_template(self):
         return {
