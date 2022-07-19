@@ -3,6 +3,7 @@ from collections import defaultdict
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from silica_django.forms import SilicaFormMixin
 
 
 class SilicaSubFormArrayField(forms.Field):
@@ -146,15 +147,22 @@ class SilicaSubFormArrayField(forms.Field):
             self._update_errors[pk].append(form.errors)
             return None
 
+    def _instantiate_form(self, data=None, instance=None):
+        # if the form subclasses silica form, include parent_instance as a kwarg
+        kwargs = {'data': data, 'instance': instance}
+        if isinstance(self.instance_form, SilicaFormMixin):
+            kwargs['parent_instance'] = self.parent_instance
+        return self.instance_form(**kwargs)
+
     def refresh_data(self):
         self.queryset = self.get_queryset()
-        self._instantiated_forms = [self.instance_form(instance=instance) for instance in self.queryset]
+        self._instantiated_forms = [self._instantiate_form(instance=instance) for instance in self.queryset]
         self.initial = [{**form.initial, f'{self.identifier_field}': getattr(form.instance, self.identifier_field)}
                         for form in self._instantiated_forms]
 
     def validate_against_form(self, form_data, instance=None):
         """ Ensure that data being passed from frontend validates against form """
-        form = self.instance_form(form_data, instance=instance)
+        form = self._instantiate_form(data=form_data, instance=instance)
         form.is_valid()
         return form
 

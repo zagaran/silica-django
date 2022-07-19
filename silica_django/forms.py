@@ -25,7 +25,9 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         silica_config = None
         layout = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, parent_instance=None, **kwargs):
+        # if this form is an array item, it should have access to the instance of the form containing the array field
+        self.parent_instance = parent_instance
         # if we are intaking data from a POST via args, process it
         new_args = [*args]
         new_kwargs = kwargs.copy()
