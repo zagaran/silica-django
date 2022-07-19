@@ -3,7 +3,7 @@ from collections import defaultdict
 from django import forms
 
 from silica_django.fields import SilicaSubFormArrayField
-from silica_django.layout import Control, VerticalLayout, CustomElement
+from silica_django.layout import Control, VerticalLayout, CustomHTMLElement
 from silica_django.mixins import JsonSchemaMixin
 
 
@@ -90,12 +90,10 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
                                                                                        SilicaSubFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
-            elif field_name in self.initial:
-                initial[field_name] = self.initial[field_name]
+            # TODO: figure out why this is an empty object for modelforms
+            # elif field_name in self.initial:
+            #     initial[field_name] = self.initial[field_name]
             else:
-                initial[field_name] = field.initial
-            # if a model is new, use the initial value of the field (if it exists) to override
-            if self.instance._state.adding and field.initial:
                 initial[field_name] = field.initial
         return initial
 
@@ -125,9 +123,10 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     
     @property
     def custom_elements(self):
-        """ Returns a list of CustomElement items in the form's Meta.layout """
+        """ Returns a list of CustomHTMLElement items in the form's Meta.layout """
         if hasattr(self.Meta, 'layout'):
-            return list(filter(lambda e: isinstance(e, CustomElement), self.Meta.layout))
+            # we know that the top-level layout cannot be a custom html element, so we can just iterate through elements
+            return list(filter(lambda e: isinstance(e, CustomHTMLElement), self.Meta.layout.get_all_elements()))
         return []
 
     def get_custom_elements_content(self):

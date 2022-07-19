@@ -63,6 +63,12 @@ class JsonSchemaMixin(JsonSchemaUtils):
                 field_kwargs['minItems'] = field.min_instances
             if field.max_instances:
                 field_kwargs['maxItems'] = field.max_instances
+        # if the field is not required, then null/blank is a valid option
+        if not field.required:
+            # allow null
+            field_type = [field_type, 'null']
+            # allow blank
+            field_kwargs['minLength'] = 0
         return {
             "type": field_type,
             **field_kwargs

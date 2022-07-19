@@ -11,7 +11,7 @@ class SilicaUiElementType:
     category = "Category"
     categorization = "Categorization"
     control = "Control"
-    custom_element = "CustomElement"
+    custom_element = "CustomHTMLElement"
 
 
 class SilicaUiElement:
@@ -76,6 +76,17 @@ class SilicaLayout(SilicaUiElement):
         else:
             raise Exception(f"Unhandled type {type(arg)}")
 
+    def get_all_elements(self):
+        """ Returns all LayoutElements in a flat array; for use when nesting is not important, e.g. setting up mappings """
+        elems = []
+        for item in self.elements:
+            if isinstance(item, SilicaLayout):
+                elems.extend(item.get_all_elements())
+            elif isinstance(item, Control):
+                elems.append(Control)
+            else:
+                raise Exception(f"Unsupported element {item}")
+
     def get_ui_schema(self, silica_form):
         schema = self.kwargs
         # flatten elements
@@ -119,7 +130,7 @@ class Category(SilicaLayout):
         self.kwargs.update({'label': label})
 
 
-class CustomElement(SilicaUiElement):
+class CustomHTMLElement(SilicaUiElement):
     type = SilicaUiElementType.custom_element
     content = None
     rule = None
