@@ -86,6 +86,7 @@ class SilicaLayout(SilicaUiElement):
                 elems.append(Control)
             else:
                 raise Exception(f"Unsupported element {item}")
+        return elems
 
     def get_ui_schema(self, silica_form):
         schema = self.kwargs

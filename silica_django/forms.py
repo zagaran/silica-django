@@ -26,17 +26,32 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         layout = None
 
     def __init__(self, *args, **kwargs):
-        # if we are intaking data from a POST, process it
+        # if we are intaking data from a POST via args, process it
         new_args = [*args]
+        new_kwargs = kwargs.copy()
         if len(args) > 0:
             # we have to mutate the querydict, so make a copy
             raw_data = new_args[0].copy()
-            array_info = self._extract_array_info(raw_data)
+            array_keys, array_info = self._extract_array_info(raw_data)
             for key, values in array_info.items():
                 raw_data[key] = values
+            for key in array_keys:
+                # remove original, unprocessed data from args
+                del raw_data[key]
             new_args = [raw_data, *args]
-        self.instance = kwargs.get('instance')
-        super().__init__(*new_args, **kwargs)
+        if 'data' in kwargs:
+            # it is also valid to pass data to a form as the data kwarg
+            orig_data = kwargs.pop('data', {})
+            array_keys, array_info = self._extract_array_info(orig_data)
+            data = orig_data.copy()
+            for key, values in array_info.items():
+                data[key] = values
+            for key in array_keys:
+                # remove original, unprocessed data from kwargs
+                del data[key]
+            new_kwargs['data'] = data
+        self.instance = new_kwargs.get('instance')
+        super().__init__(*new_args, **new_kwargs)
         self._setup_array_fields()
 
     def get_silica_config(self):
