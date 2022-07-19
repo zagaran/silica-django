@@ -147,13 +147,13 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         """ Returns a list of CustomHTMLElement items in the form's Meta.layout """
         if hasattr(self.Meta, 'layout'):
             # we know that the top-level layout cannot be a custom html element, so we can just iterate through elements
-            return list(filter(lambda e: isinstance(e, CustomHTMLElement), self.Meta.layout.get_all_elements()))
+            return [e for e in self.Meta.layout.get_all_elements() if isinstance(e, CustomHTMLElement)]
         return []
 
     def get_custom_elements_content(self):
         custom_elements_content = {}
         for element in self.custom_elements:
-            custom_elements_content.update(element.get_mapped_content)
+            custom_elements_content.update(element.get_mapped_content())
         return custom_elements_content
 
 

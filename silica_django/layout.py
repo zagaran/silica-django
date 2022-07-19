@@ -82,8 +82,8 @@ class SilicaLayout(SilicaUiElement):
         for item in self.elements:
             if isinstance(item, SilicaLayout):
                 elems.extend(item.get_all_elements())
-            elif isinstance(item, Control):
-                elems.append(Control)
+            elif isinstance(item, SilicaUiElement):
+                elems.append(item)
             else:
                 raise Exception(f"Unsupported element {item}")
         return elems
