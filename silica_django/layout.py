@@ -58,10 +58,14 @@ class Control(SilicaUiElement, JsonSchemaMixin):
 class SilicaLayout(SilicaUiElement):
     elements = None
     rule = None
+    # because layouts are not named and therefore do not have a SilicaFieldConfig, css_classes must be manually
+    # set
+    css_classes = None
 
-    def __init__(self, *args, rule=None, **kwargs):
+    def __init__(self, *args, rule=None, css_classes=None, **kwargs):
         super().__init__(**kwargs)
         self.rule = rule
+        self.css_classes = css_classes
         # args should be a list of SilicaUiElements
         self.elements = [self._process_arg(a) for a in args]
         self.kwargs.update({'type': self.type})
@@ -92,6 +96,8 @@ class SilicaLayout(SilicaUiElement):
         schema = self.kwargs
         # flatten elements
         schema['elements'] = [element.get_ui_schema(silica_form) for element in self.elements]
+        if self.css_classes:
+            schema['options'] = {'overrideCss': self.css_classes}
         if self.rule:
             schema['rule'] = self.rule.get_ui_schema()
         return schema
