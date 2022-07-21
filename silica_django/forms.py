@@ -159,8 +159,8 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
 
 class SilicaModelFormMixin(SilicaFormMixin, forms.ModelForm):
     def save(self, commit=True):
-        # save array fields before continuing with save
+        super().save(commit=commit)
+        # save array fields after we have saved the parent instance
         for field in self.fields.values():
             if isinstance(field, SilicaSubFormArrayField):
                 field.do_save()
-        return super().save(commit=commit)
