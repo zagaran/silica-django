@@ -48,7 +48,7 @@ class Control(SilicaUiElement, JsonSchemaMixin):
         field_config = silica_form.get_field_config(self.field_name)
         if field_config:
             if field_config.rule:
-                self.kwargs['rule'] = field_config.rule.get_ui_schema()
+                self.kwargs['rule'] = field_config.rule.get_rule_schema()
             self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name], field_config=field_config))
         else:
             self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name]))
@@ -57,9 +57,9 @@ class Control(SilicaUiElement, JsonSchemaMixin):
 
 class SilicaLayout(SilicaUiElement):
     elements = None
-    rule = None
-    # because layouts are not named and therefore do not have a SilicaFieldConfig, css_classes must be manually
+    # because layouts are not named and therefore do not have a SilicaFieldConfig, css_classes and rule must be manually
     # set
+    rule = None
     css_classes = None
 
     def __init__(self, *args, rule=None, css_classes=None, **kwargs):
@@ -99,7 +99,7 @@ class SilicaLayout(SilicaUiElement):
         if self.css_classes:
             schema['options'] = {'overrideCss': self.css_classes}
         if self.rule:
-            schema['rule'] = self.rule.get_ui_schema()
+            schema['rule'] = self.rule.get_rule_schema()
         return schema
 
 
@@ -162,5 +162,5 @@ class CustomHTMLElement(SilicaUiElement):
     def get_ui_schema(self, silica_form):
         schema = self.kwargs
         if self.rule:
-            schema['rule'] = self.rule.get_ui_schema(silica_form)
+            schema['rule'] = self.rule.get_rule_schema()
         return schema

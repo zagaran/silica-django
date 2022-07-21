@@ -92,7 +92,7 @@ class JsonSchemaMixin(JsonSchemaUtils):
         # add rules and update uischema
         if field_config:
             if field_config.rule:
-                ui_schema['rule'] = field_config.rule.get_ui_schema()
+                ui_schema['rule'] = field_config.rule.get_rule_schema()
             if field_config.uischema:
                 ui_opts = ui_schema['options']
                 ui_opts.update(field_config.uischema['options'])

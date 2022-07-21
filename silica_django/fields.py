@@ -58,7 +58,7 @@ class SilicaSubFormArrayField(forms.Field):
     @property
     def qs_lookup(self):
         if not self._qs_lookup:
-            self._qs_lookup = {item[self.identifier_field]: item for item in self.queryset}
+            self._qs_lookup = {item[self.identifier_field]: item for item in self.get_queryset()}
         return self._qs_lookup
 
     def prepare_for_commit(self, data):

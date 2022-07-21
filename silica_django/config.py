@@ -33,8 +33,8 @@ class SilicaFieldConfig:
     def __init__(self, rule=None, maximum=None, minimum=None, default=None, min_length=None, 
                  max_length=None, description=None, type=None, schema_format=None, label=None, 
                  scope=None, ui_options=None, detail=None, show_sort_buttons=None, element_label_prop=None, 
-                 ui_format=None, readonly=None, multiple_of=None, title=None, examples=None, display_delete=False, 
-                 enable_add=False, error_message=None, no_data_msg=None, static_title=None, add_text=None, 
+                 ui_format=None, readonly=None, multiple_of=None, title=None, examples=None, display_delete=None, 
+                 enable_add=None, error_message=None, no_data_msg=None, static_title=None, add_text=None, 
                  max_item_text=None, css_classes=None, wrapper_css_classes=None):
         # build kwargs into the uischema and schema objects formatted as jsonschema expects
         self.rule = rule
