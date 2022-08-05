@@ -1,7 +1,11 @@
 import random
 import string
 
+from django.template import engines
+from django.template.exceptions import TemplateSyntaxError, TemplateDoesNotExist
+
 from silica_django.mixins import JsonSchemaMixin
+from silica_django.templating import template_from_string
 
 
 class SilicaUiElementType:
@@ -24,7 +28,7 @@ class SilicaUiElement:
             self.kwargs = {
                 **kwargs
             }
-            
+
     def get_ui_schema(self, silica_form):
         raise NotImplemented
 
@@ -49,7 +53,8 @@ class Control(SilicaUiElement, JsonSchemaMixin):
         if field_config:
             if field_config.rule:
                 self.kwargs['rule'] = field_config.rule.get_rule_schema()
-            self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name], field_config=field_config))
+            self.kwargs.update(
+                self._django_widget_to_ui_schema(silica_form.fields[self.field_name], field_config=field_config))
         else:
             self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name]))
         return self.kwargs
@@ -155,9 +160,9 @@ class CustomHTMLElement(SilicaUiElement):
         self.kwargs.update(kwargs)
         self.content = content
 
-    def get_mapped_content(self):
+    def get_mapped_content(self, context):
         """ returns a dictionary of this element's generated id to the content it should render """
-        return {self._id: self.content}
+        return {self._id: template_from_string(self.content).render(context)}
 
     def get_ui_schema(self, silica_form):
         schema = self.kwargs

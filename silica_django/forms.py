@@ -21,11 +21,16 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         @custom_components - a mapping of fields to the name of the custom Control renderer you want to use.
 
      """
+    context = None
+
     class Meta:
         silica_config = None
         layout = None
 
-    def __init__(self, *args, parent_instance=None, **kwargs):
+    def __init__(self, *args, parent_instance=None, context=None, **kwargs):
+        if context is None:
+            context = {}
+        self.context = context
         # if this form is an array item, it should have access to the instance of the form containing the array field
         self.parent_instance = parent_instance
         # if we are intaking data from a POST via args, process it
@@ -64,9 +69,9 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     def get_field_config(self, field_name):
         silica_config = self.get_silica_config()
         if silica_config:
-            return self.Meta.silica_config.get_field_config(field_name)
+            return self.Meta.silica_config.get_field_config(field_name, context=self.context)
         return None
-    
+
     def _setup_array_fields(self):
         for field in self.fields.values():
             if isinstance(field, SilicaSubFormArrayField):
@@ -111,7 +116,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
                                                                                        SilicaSubFormArrayField):
                 initial[field_name] = getattr(self.instance, field_name)
-            # TODO: figure out why this is an empty object for modelforms
+            # TODO: figure out why this makes stuff break
             # elif field_name in self.initial:
             #     initial[field_name] = self.initial[field_name]
             else:
@@ -153,7 +158,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     def get_custom_elements_content(self):
         custom_elements_content = {}
         for element in self.custom_elements:
-            custom_elements_content.update(element.get_mapped_content())
+            custom_elements_content.update(element.get_mapped_content(self.context))
         return custom_elements_content
 
 

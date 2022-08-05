@@ -15,3 +15,8 @@ There is a (relatively sparse) test suite which comes with this library to preve
 
 ## Documentation
 There is a combined documentation repository for all Silica libraries located at [Silica-Docs](https://www.github.com/zagaran/silica-docs).
+
+## TODO
+- [] add changelog
+- [] update roadmap
+- [] update documentation (and include some kind of versioning for it)

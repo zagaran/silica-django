@@ -58,24 +58,24 @@ class SilicaSubFormArrayField(forms.Field):
     @property
     def qs_lookup(self):
         if not self._qs_lookup:
-            self._qs_lookup = {item[self.identifier_field]: item for item in self.get_queryset()}
+            self._qs_lookup = {getattr(item, self.identifier_field): item for item in self.get_queryset()}
         return self._qs_lookup
 
     def prepare_for_commit(self, data):
         updates = []
         creates = []
         if data:
-            for item in data:
+            for idx, item in enumerate(data):
                 # the identifier field will either be the empty string or the correct value for the object
                 pk = item.pop(self.identifier_field, None)
                 if pk:
                     # if the item already has a pk, we are updating
-                    update = self.handle_update(pk, item)
+                    update = self.handle_update(pk, item, idx=idx)
                     if update:
                         updates.append(update)
                 else:
                     # if the item does not have a pk, we are creating
-                    create = self.handle_create(item)
+                    create = self.handle_create(item, idx=idx)
                     if create:
                         creates.append(create)
         return creates, updates
@@ -105,42 +105,59 @@ class SilicaSubFormArrayField(forms.Field):
         except Exception as e:
             self._errors.append(f"There was an error deleting items. {repr(e)}")
 
-    def prepare_create(self, item):
+    def prepare_create(self, item, idx=None):
         """
 
         Args:
             item: a dictionary representing the keys and values from the submitted form
+        Keyword Args:
+            idx: an integer representing the index of this item in the array (0-indexed)
 
         Returns:
             A Django Model object which can be passed to bulk_create
         """
         return self.queryset.model(item)
 
-    def handle_create(self, item):
+    def handle_create(self, item, idx=None):
         form = self.validate_against_form(item)
         if not form.errors:
-            return self.prepare_create(form.cleaned_data)
+            return self.prepare_create(form.cleaned_data, idx=idx)
         else:
             self._errors.append(f"There was an error creating an item. {form.errors}")
             return None
 
-    def prepare_update(self, pk, item):
+    def prepare_update(self, pk, item, idx=None):
         """
 
         Args:
             pk: the primary key of the object to be updated
             item: a dictionary representing the keys and values from the submitted form
 
+        Keyword Args:
+            idx: an integer representing the index of this item in the array (0-indexed)
+
         Returns:
             A Django Model object which can be passed to bulk_update
         """
         return self.queryset.model(item, **{self.identifier_field: pk})
 
-    def handle_update(self, pk, item):
+    def handle_update(self, pk, item, idx=None):
+        """
+
+        Args:
+            pk: the primary key of the object to be updated
+            item: a dictionary representing the keys and values from the submitted form
+
+        Keyword Args:
+            idx: an integer representing the index of this item in the array (0-indexed)
+
+        Returns:
+            A Django Model object which can be passed to bulk_update or None if form errored
+        """
         instance = self.qs_lookup[pk]
         form = self.validate_against_form(item, instance=instance)
         if not form.errors:
-            return self.prepare_update(pk, form.cleaned_data)
+            return self.prepare_update(pk, form.cleaned_data, idx=idx)
         else:
             self._update_errors[pk].append(form.errors)
             return None

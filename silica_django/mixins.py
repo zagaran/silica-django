@@ -55,6 +55,8 @@ class JsonSchemaMixin(JsonSchemaUtils):
             field_type = "string"
             if not hasattr(field, 'choices'):
                 field_kwargs["oneOf"] = [{'const': str(value), 'title': title} for (value, title) in field.widget.choices]
+        if field.initial:
+            field_kwargs['default'] = field.initial
         if field_config:
             if field_config.schema:
                 field_kwargs.update(field_config.schema)
