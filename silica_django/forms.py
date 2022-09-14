@@ -1,8 +1,9 @@
 from collections import defaultdict
+from copy import copy
 
 from django import forms
 
-from silica_django.fields import SilicaSubFormArrayField
+from silica_django.fields import SilicaSubFormArrayField, SilicaSubFormField
 from silica_django.layout import Control, VerticalLayout, CustomHTMLElement
 from silica_django.mixins import JsonSchemaMixin
 
@@ -22,12 +23,19 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
 
      """
     context = None
+    field_prefix = None
+    subform_container_class = None
+    _uischema = None
+    _elements = None
+    _schema = None
 
     class Meta:
         silica_config = None
         layout = None
 
-    def __init__(self, *args, parent_instance=None, context=None, **kwargs):
+    def __init__(self, *args, parent_instance=None, context=None, subform_container_class=None, **kwargs):
+        if subform_container_class is None:
+            self.subform_container_class = VerticalLayout
         if context is None:
             context = {}
         self.context = context
@@ -60,6 +68,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         self.instance = new_kwargs.get('instance')
         super().__init__(*new_args, **new_kwargs)
         self._setup_array_fields()
+        self._setup_subform_fields()
 
     def get_silica_config(self):
         if hasattr(self.Meta, 'silica_config'):
@@ -77,6 +86,11 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if isinstance(field, SilicaSubFormArrayField):
                 field.parent_instance = self.instance
 
+    def _setup_subform_fields(self):
+        for field in self.fields.values():
+            if isinstance(field, SilicaSubFormField):
+                field.parent_instance = self.instance
+
     def _extract_array_info(self, raw_data):
         if not raw_data:
             return [], {}
@@ -86,7 +100,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         for key, value in raw_data.items():
             # array fields are named using the following pattern:
             # <array_form_field>.<item_count>.<form_field>
-            split_key = key.split('.') # extract pieces
+            split_key = key.split('.')  # extract pieces
             if len(split_key) < 3:
                 # not an array field
                 continue
@@ -123,30 +137,48 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                 initial[field_name] = field.initial
         return initial
 
+    def get_elements(self, field_prefixes=None):
+        if self._elements is None:
+            # this function is only ever called after the form has been instantiated, so we have access to self.fields
+            if hasattr(self.Meta, 'layout'):
+                return self.Meta.layout.get_ui_schema(self)
+            elements = []
+            if field_prefixes is None:
+                field_prefixes = []
+            for field_name, field in self.fields.items():
+                if isinstance(field, SilicaSubFormField):
+                    prefs = copy(field_prefixes)
+                    prefs.append(field_name)
+                    subform_elements = field.instantiated_form.get_elements(field_prefixes=prefs)
+                    elements.append(self.subform_container_class(*subform_elements))
+                else:
+                    ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
+                    element = Control(field_name, form=self, field_prefix="/properties/".join(field_prefixes), **ui_kwargs)
+                    elements.append(element)
+            self._elements = elements
+        return self._elements
+
     def get_ui_schema(self):
-        # this function is only ever called after the form has been instantiated, so we have access to self.fields
-        if hasattr(self.Meta, 'layout'):
-            return self.Meta.layout.get_ui_schema(self)
-        elements = []
-        for field_name, field in self.fields.items():
-            ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
-            element = Control(field_name, **ui_kwargs)
-            elements.append(element)
-        return VerticalLayout(*elements).get_ui_schema(self)
+        if not self._uischema:
+            self._uischema = VerticalLayout(*self.get_elements()).get_ui_schema()
+        return self._uischema
 
     def get_data_schema(self):
         """ Schema is used by the frontend to validate rules """
         # TODO: refine this to support more complex jsonschema rules and to (perhaps) simplify redundant rules
         # TODO: support error_message https://stackoverflow.com/questions/65303161/how-can-i-override-default-error-messages-text-in-json-forms
-        properties = {
-            field_name: self._django_to_jsonschema_field(field_name, field, field_config=self.get_field_config(field_name))
-            for field_name, field in self.fields.items()
-        }
-        return {
-            "type": "object",
-            "properties": properties
-        }
-    
+        if not self._schema:
+            properties = {
+                field_name: self._django_to_jsonschema_field(field_name, field,
+                                                             field_config=self.get_field_config(field_name))
+                for field_name, field in self.fields.items()
+            }
+            self._schema = {
+                "type": "object",
+                "properties": properties
+            }
+        return self._schema
+
     @property
     def custom_elements(self):
         """ Returns a list of CustomHTMLElement items in the form's Meta.layout """

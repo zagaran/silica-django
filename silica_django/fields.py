@@ -5,6 +5,89 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 
+class SilicaSubFormField(forms.Field):
+    """
+        Implements a special field where the item is an object related to the form instance.
+
+        To customize the behavior of this field, subclass it and implement your own handler functions as needed.
+
+    """
+
+    instance_form = None
+    identifier_field = 'pk'
+    parent_instance = None
+    instance = None
+    errors = []
+    _raw = None
+    _instantiated_form = None
+    _prefixes_by_field = None
+
+    def __init__(self, *args, instance=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance_form:
+            raise NotImplementedError("You must define instance_form to use this field")
+        if not issubclass(self.instance_form, forms.models.ModelForm):
+            raise TypeError("instance_form must subclass ModelForm")
+        if instance:
+            self.instance = instance
+
+    @property
+    def instantiated_form(self):
+        if not self._instantiated_form:
+            if self.instance:
+                self._instantiated_form = self.instance_form(instance=self.instance)
+            else:
+                self._instantiated_form = self.instance_form()
+        return self._instantiated_form
+
+    def get_sub_fields(self):
+        return self.instantiated_form.fields
+
+    def get_form_data_schema(self):
+        return self.instantiated_form.get_data_schema()
+
+    def get_form_ui_schema(self, field_prefix=None):
+        return self.instantiated_form.get_ui_schema(field_prefix=field_prefix)
+
+    def _instantiate_form(self, data=None, instance=None):
+        # local import required to prevent cyclical imports
+        from silica_django.forms import SilicaFormMixin
+        # if the form subclasses silica form, include parent_instance as a kwarg
+        kwargs = {'data': data, 'instance': instance}
+        if issubclass(self.instance_form, SilicaFormMixin):
+            kwargs['parent_instance'] = self.parent_instance
+        return self.instance_form(**kwargs)
+
+    def prepare_for_commit(self, data):
+        if data:
+            if self.identifier_field in data.keys():
+                return self.handle_update(data)
+            return self.handle_create(data)
+        return None
+
+    def handle_update(self, data):
+        if not self.instance:
+            self.instance = self.instance_form.Meta.model.objects.get(pk=data[self.identifier_field])
+        form = self._instantiate_form(data=data, instance=self.instance)
+        if form.is_valid():
+            form.save()
+            self.instance.refresh_from_db()
+            return self.instance
+        else:
+            self.errors.append(form.errors)
+            return None
+
+    def handle_create(self, data):
+        form = self._instantiate_form(data)
+        if form.is_valid():
+            form.save()
+            # TODO: verify that this will return the newly created instance
+            return form.instance
+        else:
+            self.errors.append(form.errors)
+            return None
+
+
 class SilicaSubFormArrayField(forms.Field):
     """
         Implements a special kind of array field where the items are objects related to the form instance.
@@ -47,6 +130,9 @@ class SilicaSubFormArrayField(forms.Field):
             raise TypeError("instance_form must subclass ModelForm")
         if queryset:
             self.queryset = queryset
+
+    def get_form_data_schema(self):
+        return self.instance_form().get_data_schema()
 
     def get_queryset(self):
         if self.queryset:

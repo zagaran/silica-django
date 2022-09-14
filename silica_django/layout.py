@@ -29,34 +29,48 @@ class SilicaUiElement:
                 **kwargs
             }
 
-    def get_ui_schema(self, silica_form):
+    def __repr__(self):
+        return f"{self.type}: {self.field_name}"
+
+    def get_ui_schema(self):
         raise NotImplemented
 
 
 class Control(SilicaUiElement, JsonSchemaMixin):
     type = SilicaUiElementType.control
 
-    def __init__(self, field_name, scope=None, **kwargs):
-        self.field_name = field_name
+    def __init__(self, field_name, field_prefix=None, scope=None, form=None, **kwargs):
         super().__init__(**kwargs)
-        if scope is None:
-            scope = f'#/properties/{field_name.lower()}'
+        self.field_name = field_name
+        self.field_prefix = field_prefix
+        self.form = form
+        if not scope:
+            self.set_scope(prefix=field_prefix)
+        else:
+            self.kwargs.update({'scope': scope})
         self.kwargs.update({
-            'scope': scope,
             'type': self.type,
             'field_name': field_name,
         })
         self.kwargs.update(kwargs)
 
-    def get_ui_schema(self, silica_form):
-        field_config = silica_form.get_field_config(self.field_name)
+    def set_scope(self, prefix=None):
+        if prefix:
+            scope = f'#/properties/{prefix}/properties/{self.field_name.lower()}'
+        else:
+            scope = f'#/properties/{self.field_name.lower()}'
+        self.kwargs.update({'scope': scope})
+
+    def get_ui_schema(self):
+        field_config = self.form.get_field_config(self.field_name)
         if field_config:
             if field_config.rule:
                 self.kwargs['rule'] = field_config.rule.get_rule_schema()
             self.kwargs.update(
-                self._django_widget_to_ui_schema(silica_form.fields[self.field_name], field_config=field_config))
+                self._django_widget_to_ui_schema(self.form.fields[self.field_name], field_config=field_config)
+            )
         else:
-            self.kwargs.update(self._django_widget_to_ui_schema(silica_form.fields[self.field_name]))
+            self.kwargs.update(self._django_widget_to_ui_schema(self.form.fields[self.field_name]))
         return self.kwargs
 
 
@@ -97,10 +111,10 @@ class SilicaLayout(SilicaUiElement):
                 raise Exception(f"Unsupported element {item}")
         return elems
 
-    def get_ui_schema(self, silica_form):
+    def get_ui_schema(self):
         schema = self.kwargs
         # flatten elements
-        schema['elements'] = [element.get_ui_schema(silica_form) for element in self.elements]
+        schema['elements'] = [element.get_ui_schema() for element in self.elements]
         if self.css_classes:
             schema['options'] = {'overrideCss': self.css_classes}
         if self.rule:
@@ -127,10 +141,10 @@ class Group(SilicaLayout):
 class Categorization(SilicaLayout):
     type = SilicaUiElementType.categorization
 
-    def get_ui_schema(self, silica_form):
+    def get_ui_schema(self):
         if any([e.type != SilicaUiElementType.category for e in self.elements]):
             raise Exception("Categorization elements may not have any non-Category direct children.")
-        return super().get_ui_schema(silica_form)
+        return super().get_ui_schema()
 
 
 class Category(SilicaLayout):
@@ -164,7 +178,7 @@ class CustomHTMLElement(SilicaUiElement):
         """ returns a dictionary of this element's generated id to the content it should render """
         return {self._id: template_from_string(self.content).render(context)}
 
-    def get_ui_schema(self, silica_form):
+    def get_ui_schema(self):
         schema = self.kwargs
         if self.rule:
             schema['rule'] = self.rule.get_rule_schema()

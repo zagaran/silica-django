@@ -1,7 +1,7 @@
 from django import forms
 
 from silica_django import fields
-from silica_django.fields import SilicaSubFormArrayField
+from silica_django.fields import SilicaSubFormArrayField, SilicaSubFormField
 from silica_django.utils.jsonschema import JsonSchemaUtils
 from silica_django.widgets import SilicaRenderer
 
@@ -31,17 +31,23 @@ class JsonSchemaMixin(JsonSchemaUtils):
         # todo: differentiate between arrays of related items and a multi field (e.g. tags)
         elif isinstance(field, fields.SilicaSubFormArrayField):
             field_type = "array"
-            if field._instantiated_forms:
-                item_schema = field._instantiated_forms[0].get_data_schema()
-            else:
-                # there are no existing sub-items, instantiate the form to get the schema
-                item_schema = field._instantiate_form().get_data_schema()
-            item_schema["properties"][field.identifier_field] = {
+            item_schema = field.get_form_data_schema()
+            item_schema['properties'][field.identifier_field] = {
                     "type": "number",
                     "hidden": True
                 }
             field_kwargs['items'] = {
                 **item_schema,
+            }
+        elif isinstance(field, fields.SilicaSubFormField):
+            field_type = "object"
+            item_schema = field.get_form_data_schema()
+            item_schema["properties"][field.identifier_field] = {
+                "type": "number",
+                "hidden": True
+            }
+            field_kwargs = {
+                **item_schema
             }
         if hasattr(field, 'choices'):
             field_kwargs["oneOf"] = [{'const': value, 'title': title} for (value, title) in field.choices]
@@ -78,7 +84,7 @@ class JsonSchemaMixin(JsonSchemaUtils):
 
     def _django_widget_to_ui_schema(self, field, field_config=None):
         ui_schema = {
-            'options': {}
+            'options': {},
         }
         if field.label:
             ui_schema['label'] = field.label
