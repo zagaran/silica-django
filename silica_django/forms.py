@@ -4,7 +4,7 @@ from copy import copy
 from django import forms
 
 from silica_django.fields import SilicaSubFormArrayField, SilicaSubFormField
-from silica_django.layout import Control, VerticalLayout, CustomHTMLElement
+from silica_django.layout import Control, VerticalLayout, CustomHTMLElement, Group
 from silica_django.mixins import JsonSchemaMixin
 
 
@@ -24,7 +24,6 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
      """
     context = None
     field_prefix = None
-    subform_container_class = None
     _uischema = None
     _elements = None
     _schema = None
@@ -34,8 +33,6 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         layout = None
 
     def __init__(self, *args, parent_instance=None, context=None, subform_container_class=None, **kwargs):
-        if subform_container_class is None:
-            self.subform_container_class = VerticalLayout
         if context is None:
             context = {}
         self.context = context
@@ -47,9 +44,9 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         if len(args) > 0:
             # we have to mutate the querydict, so make a copy
             raw_data = new_args[0].copy()
-            array_keys, array_info = self._extract_array_info(raw_data)
-            for key, values in array_info.items():
-                raw_data[key] = values
+            array_keys, array_info = self._extract_subform_info(raw_data)
+            for key, value in array_info.items():
+                raw_data[key] = value
             for key in array_keys:
                 # remove original, unprocessed data from args
                 del raw_data[key]
@@ -57,10 +54,10 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         if 'data' in kwargs:
             # it is also valid to pass data to a form as the data kwarg
             orig_data = kwargs.pop('data') or {}
-            array_keys, array_info = self._extract_array_info(orig_data)
+            array_keys, array_info = self._extract_subform_info(orig_data)
             data = orig_data.copy()
-            for key, values in array_info.items():
-                data[key] = values
+            for key, value in array_info.items():
+                data[key] = value
             for key in array_keys:
                 # remove original, unprocessed data from kwargs
                 del data[key]
@@ -69,6 +66,9 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         super().__init__(*new_args, **new_kwargs)
         self._setup_array_fields()
         self._setup_subform_fields()
+
+    def create_subform_container(self, subform_field, sub_elements):
+        return Group(subform_field.label, *sub_elements)
 
     def get_silica_config(self):
         if hasattr(self.Meta, 'silica_config'):
@@ -91,30 +91,43 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if isinstance(field, SilicaSubFormField):
                 field.parent_instance = self.instance
 
-    def _extract_array_info(self, raw_data):
+    def _extract_subform_info(self, raw_data):
         if not raw_data:
             return [], {}
-        array_keys = []
+        subform_keys = []
         # iterate over raw data keys; if any are an array field, then process it
         array_items_by_name_and_count = defaultdict(lambda: defaultdict(dict))
+        subform_fields_data = defaultdict(lambda: dict())
         for key, value in raw_data.items():
             # array fields are named using the following pattern:
             # <array_form_field>.<item_count>.<form_field>
             split_key = key.split('.')  # extract pieces
-            if len(split_key) < 3:
-                # not an array field
+            if len(split_key) == 3:
+                # is a subform array field
+                array_field_name = split_key[0]
+                count = split_key[1]
+                field = split_key[2]
+                array_items_by_name_and_count[array_field_name][count][field] = value
+                subform_keys.append(key)
                 continue
-            array_field_name = split_key[0]
-            count = split_key[1]
-            field = split_key[2]
-            array_items_by_name_and_count[array_field_name][count][field] = value
-            array_keys.append(key)
+            if len(split_key) == 2:
+                # is a subform field
+                subform_field_name = split_key[0]
+                field = split_key[1]
+                subform_fields_data[subform_field_name][field] = value
+                subform_keys.append(key)
+            else:
+                # not a subform field
+                continue
         # each array field should have its own list of objects
-        array_field_data = {
+        subform_data = {
             array_field_name: values_by_count.values()
             for array_field_name, values_by_count in array_items_by_name_and_count.items()
         }
-        return array_keys, array_field_data
+        subform_data.update({
+            subform_field_name: subform_field_data for subform_field_name, subform_field_data in subform_fields_data.items()
+        })
+        return subform_keys, subform_data
 
     def get_errors_for_template(self):
         return {
@@ -126,9 +139,11 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         for field_name, field in self.fields.items():
             if isinstance(field, SilicaSubFormArrayField):
                 field.refresh_data()
+            if isinstance(field, SilicaSubFormField):
+                field.refresh_data()
             # first check instance
             if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
-                                                                                       SilicaSubFormArrayField):
+                                                                                       SilicaSubFormArrayField) and not isinstance(field, SilicaSubFormField):
                 initial[field_name] = getattr(self.instance, field_name)
             # TODO: figure out why this makes stuff break
             # elif field_name in self.initial:
@@ -150,7 +165,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                     prefs = copy(field_prefixes)
                     prefs.append(field_name)
                     subform_elements = field.instantiated_form.get_elements(field_prefixes=prefs)
-                    elements.append(self.subform_container_class(*subform_elements))
+                    elements.append(self.create_subform_container(field, subform_elements))
                 else:
                     ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
                     element = Control(field_name, form=self, field_prefix="/properties/".join(field_prefixes), **ui_kwargs)

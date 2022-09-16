@@ -31,6 +31,18 @@ class SilicaSubFormField(forms.Field):
         if instance:
             self.instance = instance
 
+    def get_instance(self):
+        raise NotImplementedError("You must define get_instance to use this field")
+
+    def refresh_data(self):
+        if self.instance:
+            self.instance.refresh_from_db()
+        else:
+            self.instance = self.get_instance()
+        # force reinstantiation of form
+        self._instantiated_form = None
+        self.initial = self.instantiated_form.get_data_for_template()
+
     @property
     def instantiated_form(self):
         if not self._instantiated_form:
@@ -86,6 +98,26 @@ class SilicaSubFormField(forms.Field):
         else:
             self.errors.append(form.errors)
             return None
+    def validate_against_form(self, form_data, instance=None):
+        """ Ensure that data being passed from frontend validates against form """
+        form = self._instantiate_form(data=form_data, instance=instance)
+        form.is_valid()
+        return form
+
+    def data_as_form(self, data):
+        # transforms raw data into a form
+        form = self.validate_against_form(data, instance=self.instance)
+        return form
+
+    def to_python(self, data):
+        self._raw = data
+        if data in self.empty_values:
+            return None
+        form = self.data_as_form(data)
+        if form.errors:
+            raise ValidationError(form.errors)
+        form.save()
+        return form.instance.id
 
 
 class SilicaSubFormArrayField(forms.Field):
