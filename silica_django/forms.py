@@ -23,7 +23,8 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
 
      """
     context = None
-    field_prefix = None
+    field_prefixes = None
+    subform_container_class = Group
     _uischema = None
     _elements = None
     _schema = None
@@ -32,10 +33,15 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         silica_config = None
         layout = None
 
-    def __init__(self, *args, parent_instance=None, context=None, subform_container_class=None, **kwargs):
+    def __init__(self, *args, parent_instance=None, context=None, subform_container_class=None, field_prefixes=None, **kwargs):
         if context is None:
             context = {}
+        if subform_container_class:
+            self.subform_container_class = subform_container_class
         self.context = context
+        if field_prefixes is None:
+            field_prefixes = []
+        self.field_prefixes = field_prefixes
         # if this form is an array item, it should have access to the instance of the form containing the array field
         self.parent_instance = parent_instance
         # if we are intaking data from a POST via args, process it
@@ -68,7 +74,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         self._setup_subform_fields()
 
     def create_subform_container(self, subform_field, sub_elements):
-        return Group(subform_field.label, *sub_elements)
+        return self.subform_container_class(subform_field.label, *sub_elements)
 
     def get_silica_config(self):
         if hasattr(self.Meta, 'silica_config'):
@@ -87,9 +93,12 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                 field.parent_instance = self.instance
 
     def _setup_subform_fields(self):
-        for field in self.fields.values():
+        for field_name, field in self.fields.items():
             if isinstance(field, SilicaSubFormField):
                 field.parent_instance = self.instance
+                prefs = copy(self.field_prefixes)
+                prefs.append(field_name)
+                field.field_prefixes = prefs
 
     def _extract_subform_info(self, raw_data):
         if not raw_data:
@@ -142,40 +151,35 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
             if isinstance(field, SilicaSubFormField):
                 field.refresh_data()
             # first check instance
-            if self.instance and hasattr(self.instance, field_name) and not isinstance(field,
-                                                                                       SilicaSubFormArrayField) and not isinstance(field, SilicaSubFormField):
+            if self.instance \
+                    and hasattr(self.instance, field_name) \
+                    and not isinstance(field, SilicaSubFormArrayField) \
+                    and not isinstance(field, SilicaSubFormField):
                 initial[field_name] = getattr(self.instance, field_name)
             # TODO: figure out why this makes stuff break
-            # elif field_name in self.initial:
-            #     initial[field_name] = self.initial[field_name]
+            elif field_name in self.initial:
+                initial[field_name] = self.initial[field_name]
             else:
                 initial[field_name] = field.initial
         return initial
 
-    def get_elements(self, field_prefixes=None):
+    def get_elements(self):
         if self._elements is None:
             # this function is only ever called after the form has been instantiated, so we have access to self.fields
-            if hasattr(self.Meta, 'layout'):
-                return self.Meta.layout.get_ui_schema(self)
             elements = []
-            if field_prefixes is None:
-                field_prefixes = []
             for field_name, field in self.fields.items():
-                if isinstance(field, SilicaSubFormField):
-                    prefs = copy(field_prefixes)
-                    prefs.append(field_name)
-                    subform_elements = field.instantiated_form.get_elements(field_prefixes=prefs)
-                    elements.append(self.create_subform_container(field, subform_elements))
-                else:
-                    ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
-                    element = Control(field_name, form=self, field_prefix="/properties/".join(field_prefixes), **ui_kwargs)
-                    elements.append(element)
+                ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
+                element = Control(field_name, form=self, field_prefix="/properties/".join(self.field_prefixes), **ui_kwargs)
+                elements.append(element)
             self._elements = elements
         return self._elements
 
     def get_ui_schema(self):
+        if hasattr(self.Meta, 'layout'):
+            self.Meta.layout.set_form(self)
+            return self.Meta.layout.get_ui_schema()
         if not self._uischema:
-            self._uischema = VerticalLayout(*self.get_elements()).get_ui_schema()
+            self._uischema = VerticalLayout(*self.get_elements(), form=self).get_ui_schema()
         return self._uischema
 
     def get_data_schema(self):
@@ -184,8 +188,9 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         # TODO: support error_message https://stackoverflow.com/questions/65303161/how-can-i-override-default-error-messages-text-in-json-forms
         if not self._schema:
             properties = {
-                field_name: self._django_to_jsonschema_field(field_name, field,
-                                                             field_config=self.get_field_config(field_name))
+                field_name: self._django_to_jsonschema_field(
+                    field_name, field, field_config=self.get_field_config(field_name)
+                )
                 for field_name, field in self.fields.items()
             }
             self._schema = {

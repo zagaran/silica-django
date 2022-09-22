@@ -21,6 +21,7 @@ class SilicaSubFormField(forms.Field):
     _raw = None
     _instantiated_form = None
     _prefixes_by_field = None
+    field_prefixes = None
 
     def __init__(self, *args, instance=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -47,9 +48,9 @@ class SilicaSubFormField(forms.Field):
     def instantiated_form(self):
         if not self._instantiated_form:
             if self.instance:
-                self._instantiated_form = self.instance_form(instance=self.instance)
+                self._instantiated_form = self.instance_form(instance=self.instance, field_prefixes=self.field_prefixes)
             else:
-                self._instantiated_form = self.instance_form()
+                self._instantiated_form = self.instance_form(field_prefixes=self.field_prefixes)
         return self._instantiated_form
 
     def get_sub_fields(self):

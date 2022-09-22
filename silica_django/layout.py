@@ -1,9 +1,7 @@
 import random
 import string
 
-from django.template import engines
-from django.template.exceptions import TemplateSyntaxError, TemplateDoesNotExist
-
+from silica_django.fields import SilicaSubFormField
 from silica_django.mixins import JsonSchemaMixin
 from silica_django.templating import template_from_string
 
@@ -22,18 +20,29 @@ class SilicaUiElement:
     type = None
     kwargs = None
     field_name = None
+    form = None
+    rule = None
+    config = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, form=None, rule=None, config=None, **kwargs):
         if self.kwargs is None:
             self.kwargs = {
                 **kwargs
             }
+        self.form = form
+        self.rule = rule
+        self.config = config
 
-    def __repr__(self):
-        return f"{self.type}: {self.field_name}"
+    def set_form(self, form):
+        # prevent overriding form if it is already set (subforms)
+        if not self.form:
+            self.form = form
 
     def get_ui_schema(self):
         raise NotImplemented
+
+    def __repr__(self):
+        return f"{self.type}: {self.field_name}"
 
 
 class Control(SilicaUiElement, JsonSchemaMixin):
@@ -62,7 +71,11 @@ class Control(SilicaUiElement, JsonSchemaMixin):
         self.kwargs.update({'scope': scope})
 
     def get_ui_schema(self):
-        field_config = self.form.get_field_config(self.field_name)
+        field = self.form.fields.get(self.field_name, None)
+        if isinstance(field, SilicaSubFormField):
+            subform_elements = field.instantiated_form.get_elements()
+            return self.form.create_subform_container(field, subform_elements).get_ui_schema()
+        field_config = self.config or self.form.get_field_config(self.field_name)
         if field_config:
             if field_config.rule:
                 self.kwargs['rule'] = field_config.rule.get_rule_schema()
@@ -75,26 +88,30 @@ class Control(SilicaUiElement, JsonSchemaMixin):
 
 
 class SilicaLayout(SilicaUiElement):
-    elements = None
     # because layouts are not named and therefore do not have a SilicaFieldConfig, css_classes and rule must be manually
     # set
-    rule = None
     css_classes = None
+    form = None
+    args = None
 
-    def __init__(self, *args, rule=None, css_classes=None, **kwargs):
+    def __init__(self, *args, css_classes=None, form=None, **kwargs):
         super().__init__(**kwargs)
-        self.rule = rule
         self.css_classes = css_classes
         # args should be a list of SilicaUiElements
-        self.elements = [self._process_arg(a) for a in args]
+        self.args = args
         self.kwargs.update({'type': self.type})
+        self.form = form
 
-    @staticmethod
-    def _process_arg(arg):
+    @property
+    def elements(self):
+        return [self._process_arg(a) for a in self.args]
+
+    def _process_arg(self, arg):
         # if arg is a SilicaUiElement, we are recursing through a layout; if it is a string, we have to construct a Control
         if type(arg) == str:
-            return Control(arg)
+            return Control(arg, form=self.form)
         elif isinstance(arg, SilicaUiElement):
+            arg.set_form(self.form)
             return arg
         else:
             raise Exception(f"Unhandled type {type(arg)}")
@@ -159,7 +176,6 @@ class Category(SilicaLayout):
 class CustomHTMLElement(SilicaUiElement):
     type = SilicaUiElementType.custom_element
     content = None
-    rule = None
     _id = None
 
     def __init__(self, content, *args, **kwargs):
