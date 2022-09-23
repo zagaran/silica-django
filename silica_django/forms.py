@@ -142,7 +142,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         return {
             field_name: [e for e in errors] for field_name, errors in self.errors.items()
         }
-    
+
     @property
     def all_fields(self):
         fields = self.base_fields
@@ -170,7 +170,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         if self._elements is None:
             # this function is only ever called after the form has been instantiated, so we have access to self.fields
             elements = []
-            for field_name, field in self.fields.items():
+            for field_name, field in self.all_fields.items():
                 ui_kwargs = self._django_widget_to_ui_schema(field, field_config=self.get_field_config(field_name))
                 element = Control(field_name, form=self, field_prefix="/properties/".join(self.field_prefixes), **ui_kwargs)
                 elements.append(element)
@@ -194,7 +194,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                 field_name: self._django_to_jsonschema_field(
                     field_name, field, field_config=self.get_field_config(field_name)
                 )
-                for field_name, field in self.fields.items()
+                for field_name, field in self.all_fields.items()
             }
             self._schema = {
                 "type": "object",
