@@ -16,6 +16,7 @@ class SilicaSubFormField(forms.Field):
     instance_form = None
     identifier_field = 'pk'
     parent_instance = None
+    parent_relation_name = None
     instance = None
     errors = []
     _raw = None
@@ -33,7 +34,10 @@ class SilicaSubFormField(forms.Field):
             self.instance = instance
 
     def get_instance(self):
-        raise NotImplementedError("You must define get_instance to use this field")
+        if self.parent_relation_name:
+            kwargs = {self.parent_relation_name: self.parent_instance}
+            return self.instance_form.Meta.model.objects.get(**kwargs)
+        raise NotImplementedError("You must define get_instance or parent_relation_name to use this field")
 
     def refresh_data(self):
         if self.instance:
@@ -144,6 +148,8 @@ class SilicaSubFormArrayField(forms.Field):
     batch_size = 200
     min_instances = 0
     max_instances = None
+    parent_relation_name = None
+
     # this value must be set by the initialization of the form
     parent_instance = None
 
@@ -171,6 +177,9 @@ class SilicaSubFormArrayField(forms.Field):
         if self.queryset:
             # this should force a refresh of the queryset
             return self.queryset.all()
+        elif self.parent_relation_name:
+            kwargs = {self.parent_relation_name: self.parent_instance}
+            return self.instance_form.Meta.model.objects.filter(**kwargs)
         else:
             return self.instance_form.Meta.model.objects.all()
 

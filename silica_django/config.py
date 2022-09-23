@@ -23,13 +23,13 @@ class SilicaConfig:
     def _get_field_config(self, field_name):
         return self.config.get(field_name, None)
 
-    def get_field_config(self, field_name, context=None):
+    def get_field_config(self, field_name, render_context=None):
         """
         Args:
             field_name: name of field which config object is attached to
 
         Keyword Args:
-            context: if None, indicates that config is not being used for display (e.g. for generating a Rule). 
+            render_context: if None, indicates that config is not being used for display (e.g. for generating a Rule). 
                      If not none, used to format all valid strings in the schema and uischema (e.g. label, default)
 
         Returns:
@@ -37,7 +37,7 @@ class SilicaConfig:
         """
         config = self._get_field_config(field_name)
         if config:
-            return config.process(context)
+            return config.process(render_context)
         return config
 
 

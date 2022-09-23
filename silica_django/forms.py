@@ -22,7 +22,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         @custom_components - a mapping of fields to the name of the custom Control renderer you want to use.
 
      """
-    context = None
+    render_context = None
     field_prefixes = None
     subform_container_class = Group
     _uischema = None
@@ -33,12 +33,12 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         silica_config = None
         layout = None
 
-    def __init__(self, *args, parent_instance=None, context=None, subform_container_class=None, field_prefixes=None, **kwargs):
-        if context is None:
-            context = {}
+    def __init__(self, *args, parent_instance=None, render_context=None, subform_container_class=None, field_prefixes=None, **kwargs):
+        if render_context is None:
+            render_context = {}
         if subform_container_class:
             self.subform_container_class = subform_container_class
-        self.context = context
+        self.render_context = render_context
         if field_prefixes is None:
             field_prefixes = []
         self.field_prefixes = field_prefixes
@@ -84,13 +84,14 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     def get_field_config(self, field_name):
         silica_config = self.get_silica_config()
         if silica_config:
-            return self.Meta.silica_config.get_field_config(field_name, context=self.context)
+            return self.Meta.silica_config.get_field_config(field_name, render_context=self.render_context)
         return None
 
     def _setup_array_fields(self):
         for field in self.fields.values():
             if isinstance(field, SilicaSubFormArrayField):
                 field.parent_instance = self.instance
+                field.refresh_data()
 
     def _setup_subform_fields(self):
         for field_name, field in self.fields.items():
@@ -99,6 +100,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
                 prefs = copy(self.field_prefixes)
                 prefs.append(field_name)
                 field.field_prefixes = prefs
+                field.refresh_data()
 
     def _extract_subform_info(self, raw_data):
         if not raw_data:
@@ -155,7 +157,6 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         initial = {}
         for field_name, field in self.all_fields.items():
             if isinstance(field, SilicaSubFormArrayField) or isinstance(field, SilicaSubFormField):
-                field.refresh_data()
                 initial[field_name] = field.initial
             # first check instance
             elif self.instance and hasattr(self.instance, field_name):
@@ -213,7 +214,7 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
     def get_custom_elements_content(self):
         custom_elements_content = {}
         for element in self.custom_elements:
-            custom_elements_content.update(element.get_mapped_content(self.context))
+            custom_elements_content.update(element.get_mapped_content(self.render_context))
         return custom_elements_content
 
 
