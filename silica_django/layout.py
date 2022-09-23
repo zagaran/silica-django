@@ -48,8 +48,8 @@ class SilicaUiElement:
 class Control(SilicaUiElement, JsonSchemaMixin):
     type = SilicaUiElementType.control
 
-    def __init__(self, field_name, field_prefix=None, scope=None, form=None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, field_name, *args, field_prefix=None, scope=None, form=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self.field_name = field_name
         self.field_prefix = field_prefix
         self.form = form
@@ -72,18 +72,16 @@ class Control(SilicaUiElement, JsonSchemaMixin):
 
     def get_ui_schema(self):
         field = self.form.fields.get(self.field_name, None)
+        field_config = self.config or self.form.get_field_config(self.field_name)
         if isinstance(field, SilicaSubFormField):
             subform_elements = field.instantiated_form.get_elements()
-            return self.form.create_subform_container(field, subform_elements).get_ui_schema()
-        field_config = self.config or self.form.get_field_config(self.field_name)
-        if field_config:
-            if field_config.rule:
-                self.kwargs['rule'] = field_config.rule.get_rule_schema()
-            self.kwargs.update(
-                self._django_widget_to_ui_schema(self.form.fields[self.field_name], field_config=field_config)
-            )
-        else:
-            self.kwargs.update(self._django_widget_to_ui_schema(self.form.fields[self.field_name]))
+            self.kwargs.update(self.form.create_subform_container(field, subform_elements).get_ui_schema())
+        self.kwargs.update(
+            self._django_widget_to_ui_schema(self.form.fields[self.field_name], field_config=field_config)
+        )
+        # override rules set in config with rule set in layout
+        if self.rule:
+            self.kwargs['rule'] = self.rule.get_rule_schema()
         return self.kwargs
 
 

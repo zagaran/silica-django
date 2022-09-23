@@ -142,21 +142,24 @@ class SilicaFormMixin(JsonSchemaMixin, forms.Form):
         return {
             field_name: [e for e in errors] for field_name, errors in self.errors.items()
         }
+    
+    @property
+    def all_fields(self):
+        fields = self.base_fields
+        for field_name, field in self.declared_fields.items():
+            if field not in fields:
+                fields[field_name] = field
+        return fields
 
     def get_data_for_template(self):
         initial = {}
-        for field_name, field in self.fields.items():
-            if isinstance(field, SilicaSubFormArrayField):
+        for field_name, field in self.all_fields.items():
+            if isinstance(field, SilicaSubFormArrayField) or isinstance(field, SilicaSubFormField):
                 field.refresh_data()
-            if isinstance(field, SilicaSubFormField):
-                field.refresh_data()
+                initial[field_name] = field.initial
             # first check instance
-            if self.instance \
-                    and hasattr(self.instance, field_name) \
-                    and not isinstance(field, SilicaSubFormArrayField) \
-                    and not isinstance(field, SilicaSubFormField):
+            elif self.instance and hasattr(self.instance, field_name):
                 initial[field_name] = getattr(self.instance, field_name)
-            # TODO: figure out why this makes stuff break
             elif field_name in self.initial:
                 initial[field_name] = self.initial[field_name]
             else:
